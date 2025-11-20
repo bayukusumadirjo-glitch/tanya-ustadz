@@ -6,7 +6,6 @@ from datetime import datetime
 conn = sqlite3.connect('kajian_qna.db', check_same_thread=False)
 c = conn.cursor()
 
-# Tabel kajian
 c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nama TEXT NOT NULL,
@@ -14,7 +13,6 @@ c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 aktif INTEGER DEFAULT 0
              )''')
 
-# Tabel pertanyaan — INI YANG DIPERBAIKI (NOT NOT NULL → NOT NULL)
 c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 kajian_id INTEGER,
@@ -26,7 +24,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
              )''')
 conn.commit()
 
-# === PASSWORD (ganti kalau mau) ===
+# === PASSWORD ===
 PASS_OPERATOR = "operator123"
 PASS_USTADZ   = "ustadz123"
 
@@ -37,7 +35,7 @@ else:
     is_penanya = False
 
 # ===================================
-# MODE PENANYA (dari QR)
+# MODE PENANYA (langsung dari QR)
 # ===================================
 if is_penanya:
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
@@ -114,9 +112,9 @@ else:
         st.error("Password salah!")
         st.stop()
 
-    tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Code"])
+    tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Code Tetap"])
 
-    # TAB 1 — Kelola Kajian (bisa aktif/nonaktif + hapus)
+    # TAB 1 — Kelola Kajian
     with tab1:
         st.subheader("Buat Kajian Baru")
         nama_baru = st.text_input("Nama kajian")
@@ -131,7 +129,7 @@ else:
         c.execute("SELECT id, nama, aktif FROM kajian ORDER BY id DESC")
         for row in c.fetchall():
             idk, namak, stat = row
-            c1, c2, c3, c4 = st.columns([4,1.5,1.5,2])
+            c1, c2, c3, c4 = st.columns([4, 1.5, 1.5, 2])
             c1.write(f"**{namak}**")
             c2.write("AKTIF" if stat else "Nonaktif")
             if stat:
@@ -145,14 +143,14 @@ else:
                     c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (idk,))
                     conn.commit()
                     st.rerun()
-            if c4.button("Hapus Kajian", key=f"delk_{idk}"):
+            if c4.button("Hapus Kajian", key=f"del_{idk}"):
                 c.execute("DELETE FROM pertanyaan WHERE kajian_id = ?", (idk,))
                 c.execute("DELETE FROM kajian WHERE id = ?", (idk,))
                 conn.commit()
-                st.success("Kajian dan semua pertanyaan dihapus!")
+                st.success("Kajian & semua pertanyaan dihapus!")
                 st.rerun()
 
-    # TAB 2 — Moderasi (bisa hapus meski sudah approve)
+    # TAB 2 — Moderasi
     with tab2:
         c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
         aktif = c.fetchone()
@@ -176,11 +174,10 @@ else:
         else:
             st.info("Belum ada kajian aktif.")
 
-    # TAB 3 — QR Code Tetap 1 Selamanya
+    # TAB 3 — QR Code Tetap 1 Selamanya (SUDAH DIPERBAIKI!)
     with tab3:
         st.success("QR CODE TETAP 1 SELAMANYA")
-        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"  # GANTI SETELAH DEPLOY
-        qr_link = f"{LINK_KAMU}?penanya=yes"
-        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={qr}", width=350)
-        st.code(qr)
-        st.info("Scan = langsung Penanya")
+        st.write("Cetak sekali → pakai untuk semua kajian!")
+
+        # GANTI INI DENGAN LINK STREAMLIT KAMU SETELAH DEPLOY
+        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"   # ← U
