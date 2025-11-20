@@ -1,14 +1,11 @@
-# app.py ←←← VERSI FINAL & SUDAH DIPERBAIKI TOTAL (TIDAK ADA ERROR LAGI)
-
 import streamlit as st
 import sqlite3
 from datetime import datetime
 
-# === DATABASE ===
+# === SETUP DATABASE ===
 conn = sqlite3.connect('kajian_qna.db', check_same_thread=False)
 c = conn.cursor()
 
-# Buat tabel kajian
 c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nama TEXT NOT NULL,
@@ -16,7 +13,6 @@ c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 aktif INTEGER DEFAULT 0
              )''')
 
-# Buat tabel pertanyaan (INI YANG DI-FIX: NOT NOT NULL → NOT NULL)
 c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 kajian_id INTEGER,
@@ -30,153 +26,174 @@ conn.commit()
 
 # === PASSWORD (ganti sesuai keinginan) ===
 PASS_OPERATOR = "operator123"
-PASS_USTADZ   = "ustadz123"
+PASS_USTADZ = "ustadz123"
 
-# === URL QR CODE TETAP (ganti sekali setelah deploy) ===
-PERMANENT_URL = "https://tanya-ustadz-anda.streamlit.app"   # GANTI NANTI
+# === APLIKASI ===
+st.set_page_config(page_title="Q&A Kajian Ustadz", layout="centered")
+st.title("📖 Aplikasi Q&A Kajian Ustadz")
 
-# === DETEKSI DARI QR ATAU BUKAN ===
-is_penanya = st.query_params.get("from_qr", "no") == "yes"
-if is_penanya and "from_qr" not in st.query_params:
-    st.query_params.from_qr = "yes"
+# Sidebar untuk pilih role
+role = st.sidebar.selectbox("Pilih Role Anda", ["Penanya", "Ustadz", "Operator"])
 
 # ===================================
-# 1. HALAMAN PENANYA (dari QR) — WAJIB NAMA + TIDAK BISA GANTI ROLE
+# 1. ROLE PENANYA (scan QR dulu → langsung ke halaman ini)
 # ===================================
-if is_penanya:
-    st.set_page_config(page_title="Tanya Ustadz", layout="centered")
-    st.title("Tanya Ustadz")
-    st.caption("Silakan tulis nama dan pertanyaan Anda")
+if role == "Penanya":
+    st.header("🙋 Ajukan Pertanyaan Anda")
+    st.info("Anda masuk melalui scan QR kode kajian. Pertanyaan Anda akan dimoderasi oleh operator sebelum ditampilkan kepada Ustadz.")
 
-    # Cek kajian aktif
+    # Ambil kajian yang aktif (hanya boleh ada 1 yang aktif)
     c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
-    aktif = c.fetchone()
+    kajian_aktif = c.fetchone()
 
-    if not aktif:
-        st.error("Belum ada kajian aktif. Silakan hubungi panitia/operator.")
+    if not kajian_aktif:
+        st.warning("❌ Saat ini belum ada kajian yang aktif. Silakan tunggu operator mengaktifkan kajian.")
         st.stop()
 
-    st.success(f"Kajian aktif: **{aktif[1]}**")
+    kajian_id, nama_kajian = kajian_aktif
 
-    with st.form("form_penanya"):
-        nama = st.text_input("Nama Anda * (wajib)*", placeholder="Ahmad / Ummu Aisyah")
-        pertanyaan = st.text_area("Pertanyaan Anda * (wajib)*", height=150,
-                                  placeholder="Tuliskan pertanyaan dengan jelas dan sopan...")
+    st.success(f"📌 Kajian aktif: **{nama_kajian}**")
 
-        kirim = st.form_submit_button("Kirim Pertanyaan", use_container_width=True)
+    with st.form("form_pertanyaan"):
+        nama = st.text_input("Nama Anda (boleh nama panggilan)", placeholder="Misal: Ahmad S. / Ibu Fatimah")
+        pertanyaan = st.text_area("Pertanyaan Anda", placeholder="Tuliskan pertanyaan Anda dengan sopan...", height=150)
 
-        if kirim:
-            if not nama.strip():
-                st.error("Nama wajib diisi!")
-            elif not pertanyaan.strip():
-                st.error("Pertanyaan wajib diisi!")
-            elif len(pertanyaan.strip()) < 10:
-                st.error("Pertanyaan terlalu pendek.")
+        submitted = st.form_submit_button("Kirim Pertanyaan")
+
+        if submitted:
+            if not nama.strip() or not pertanyaan.strip():
+                st.error("Nama dan pertanyaan wajib diisi!")
             else:
-                tgl = datetime.now().strftime("%d/%m/%Y %H:%M")
-                c.execute("""INSERT INTO pertanyaan 
-                             (kajian_id, nama_penanya, pertanyaan, tanggal, approved) 
-                             VALUES (?, ?, ?, ?, 0)""",
-                          (aktif[0], nama.strip(), pertanyaan.strip(), tgl))
+                tanggal = datetime.now().strftime("%d-%m-%Y %H:%M")
+                c.execute("INSERT INTO pertanyaan (kajian_id, nama_penanya, pertanyaan, tanggal, approved) VALUES (?, ?, ?, ?, 0)",
+                          (kajian_id, nama.strip(), pertanyaan.strip(), tanggal))
                 conn.commit()
-                st.success(f"Terima kasih {nama.split()[0]}! Pertanyaan sudah terkirim.")
+                st.success("✅ Pertanyaan berhasil dikirim! Tunggu moderasi operator.")
                 st.balloons()
 
-    st.info("Pertanyaan Anda akan dimoderasi terlebih dahulu oleh operator.")
-    st.stop()
-
 # ===================================
-# 2. & 3. PANEL OPERATOR & USTADZ (bukan dari QR)
+# 2. ROLE USTADZ
 # ===================================
-else:
-    st.set_page_config(page_title="Panel Operator & Ustadz", layout="wide")
-    st.title("Panel Operator & Ustadz")
+elif role == "Ustadz":
+    st.header("👳‍♂️ Dashboard Ustadz")
 
-    role = st.sidebar.selectbox("Pilih Role", ["Operator", "Ustadz"])
+    password = st.sidebar.text_input("Password Ustadz", type="password")
+    if password != PASS_USTADZ:
+        st.error("Password salah!")
+        st.stop()
 
-    if role == "Ustadz":
-        st.header("Dashboard Ustadz")
-        pwd = st.sidebar.text_input("Password Ustadz", type="password")
-        if pwd != PASS_USTADZ:
-            st.error("Password salah!")
-            st.stop()
+    c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
+    kajian_aktif = c.fetchone()
 
-        c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
-        aktif = c.fetchone()
-        if not aktif:
-            st.info("Belum ada kajian aktif.")
+    if not kajian_aktif:
+        st.info("Tidak ada kajian aktif saat ini.")
+    else:
+        kajian_id, nama_kajian = kajian_aktif
+        st.success(f"Kajian aktif: **{nama_kajian}**")
+
+        c.execute("""SELECT nama_penanya, pertanyaan, tanggal 
+                     FROM pertanyaan 
+                     WHERE kajian_id = ? AND approved = 1 
+                     ORDER BY tanggal ASC""", (kajian_id,))
+        pertanyaan_approved = c.fetchall()
+
+        if not pertanyaan_approved:
+            st.info("Belum ada pertanyaan yang di-approve.")
         else:
-            st.success(f"Kajian aktif: **{aktif[1]}**")
-            c.execute("""SELECT nama_penanya, pertanyaan, tanggal 
-                         FROM pertanyaan WHERE kajian_id = ? AND approved = 1 
-                         ORDER BY tanggal ASC""", (aktif[0],))
-            data = c.fetchall()
-            if not data:
-                st.info("Belum ada pertanyaan yang di-approve.")
-            else:
-                for i, (nama, q, tgl) in enumerate(data, 1):
+            for i, (nama, isi, tgl) in enumerate(pertanyaan_approved, 1):
+                with st.container():
                     st.markdown(f"**{i}. {nama}** — _{tgl}_")
-                    st.write(q)
+                    st.markdown(f"> {isi}")
                     st.divider()
 
-    else:  # Operator
-        st.header("Panel Operator")
-        pwd = st.sidebar.text_input("Password Operator", type="password")
-        if pwd != PASS_OPERATOR:
-            st.error("Password salah!")
-            st.stop()
+# ===================================
+# 3. ROLE OPERATOR
+# ===================================
+else:  # Operator
+    st.header("⚙️ Dashboard Operator")
 
-        tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Code TETAP"])
+    password = st.sidebar.text_input("Password Operator", type="password")
+    if password != PASS_OPERATOR:
+        st.error("Password salah!")
+        st.stop()
 
-        with tab1:
-            st.subheader("Buat Kajian Baru")
-            nama_kajian = st.text_input("Nama kajian baru")
-            if st.button("Buat Kajian") and nama_kajian:
-                c.execute("INSERT INTO kajian (nama, tanggal_dibuat) VALUES (?, ?)",
-                          (nama_kajian, datetime.now().strftime("%d/%m/%Y %H:%M")))
+    tab1, tab2, tab3 = st.tabs(["Buat & Kelola Kajian", "Moderasi Pertanyaan", "QR Code Kajian Aktif"])
+
+    # Tab 1: Buat & Kelola Kajian
+    with tab1:
+        st.subheader("Buat Kajian Baru")
+        nama_baru = st.text_input("Nama kajian baru", placeholder="Misal: Kajian Kitab Riyadhus Shalihin - 20 Nov 2025")
+        if st.button("Buat Kajian Baru"):
+            if nama_baru:
+                tanggal = datetime.now().strftime("%d-%m-%Y %H:%M")
+                c.execute("INSERT INTO kajian (nama, tanggal_dibuat, aktif) VALUES (?, ?, 0)", (nama_baru, tanggal))
                 conn.commit()
                 st.success("Kajian berhasil dibuat!")
                 st.rerun()
-
-            st.subheader("Pilih Kajian Aktif")
-            c.execute("SELECT id, nama, aktif FROM kajian ORDER BY id DESC")
-            for row in c.fetchall():
-                col1, col2 = st.columns([5, 1])
-                status = "AKTIF" if row[2] else "tidak aktif"
-                col1.write(f"**{row[1]}** — {status}")
-                if col2.button("Aktifkan", key=f"aktif_{row[0]}"):
-                    c.execute("UPDATE kajian SET aktif = 0")
-                    c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (row[0],))
-                    conn.commit()
-                    st.rerun()
-
-        with tab2:
-            c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
-            aktif = c.fetchone()
-            if aktif:
-                st.write(f"**Moderasi — {aktif[1]}**")
-                c.execute("""SELECT id, nama_penanya, pertanyaan, tanggal, approved 
-                             FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC""", (aktif[0],))
-                for q in c.fetchall():
-                    status = "Approved" if q[4] else "Menunggu"
-                    with st.expander(f"{q[1]} — {q[3]} — {status}"):
-                        st.write(q[2])
-                        if q[4] == 0:
-                            c1, c2 = st.columns(2)
-                            if c1.button("Approve", key=f"a{q[0]}"):
-                                c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (q[0],))
-                                conn.commit()
-                                st.rerun()
-                            if c2.button("Hapus", key=f"d{q[0]}"):
-                                c.execute("DELETE FROM pertanyaan WHERE id = ?", (q[0],))
-                                conn.commit()
-                                st.rerun()
             else:
-                st.info("Belum ada kajian aktif.")
+                st.error("Nama kajian wajib diisi")
 
-        with tab3:
-            st.success("QR CODE TETAP SELAMANYA — Cetak sekali, pakai terus!")
-            qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={PERMANENT_URL}"
-            st.image(qr_url, width=350)
-            st.code(PERMANENT_URL)
-            st.markdown(f"[Download QR Code]({qr_url})")
+        st.subheader("Daftar Kajian")
+        c.execute("SELECT id, nama, tanggal_dibuat, aktif FROM kajian ORDER BY id DESC")
+        daftar_kajian = c.fetchall()
+
+        for kj in daftar_kajian:
+            col1, col2 = st.columns([4,1])
+            status = "🟢 Aktif" if kj[3] else "⚪ Tidak Aktif"
+            col1.write(f"**{kj[1]}**  \n_{kj[2]}_  \n{status}")
+            if col2.button("Jadikan Aktif", key=f"aktif_{kj[0]}"):
+                c.execute("UPDATE kajian SET aktif = 0")  # matikan semua dulu
+                c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (kj[0],))
+                conn.commit()
+                st.success(f"Kajian **{kj[1]}** sekarang aktif!")
+                st.rerun()
+
+    # Tab 2: Moderasi Pertanyaan
+    with tab2:
+        c.execute("SELECT id, nama FROM kajian ORDER BY id DESC")
+        semua_kajian = c.fetchall()
+        pilihan_kajian = st.selectbox("Pilih kajian untuk dimoderasi", [f"{k[1]} (ID: {k[0]})" for k in semua_kajian])
+
+        if pilihan_kajian:
+            kj_id = int(pilihan_kajian.split("ID: ")[1][:-1])
+            c.execute("""SELECT id, nama_penanya, pertanyaan, tanggal, approved 
+                         FROM pertanyaan 
+                         WHERE kajian_id = ? 
+                         ORDER BY tanggal DESC""", (kj_id,))
+            daftar_pertanyaan = c.fetchall()
+
+            if not daftar_pertanyaan:
+                st.info("Belum ada pertanyaan untuk kajian ini.")
+            else:
+                for p in daftar_pertanyaan:
+                    pid, nama, isi, tgl, appr = p
+                    status = "✅ Approved" if appr else "⏳ Menunggu"
+                    with st.expander(f"{nama} — {tgl} — {status}"):
+                        st.write(isi)
+                        col1, col2 = st.columns(2)
+                        if appr == 0:
+                            if col1.button("Approve", key=f"app_{pid}"):
+                                c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (pid,))
+                                conn.commit()
+                                st.success("Di-approve!")
+                                st.rerun()
+                            if col2.button("Tolak/Hapus", key=f"del_{pid}"):
+                                c.execute("DELETE FROM pertanyaan WHERE id = ?", (pid,))
+                                conn.commit()
+                                st.error("Dihapus!")
+                                st.rerun()
+
+    # Tab 3: QR Code Kajian Aktif (untuk dicetak & dipasang di masjid)
+    with tab3:
+        c.execute("SELECT nama FROM kajian WHERE aktif = 1")
+        aktif = c.fetchone()
+        if aktif:
+            url_penanya = st.text_input("URL aplikasi Anda (wajib diisi untuk QR)", 
+                                        value="https://nama-app-anda.streamlit.app")  # ganti dengan link Streamlit Anda
+            if url_penanya:
+                qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={url_penanya}"
+                st.image(qr_url, caption=f"QR Code untuk kajian: {aktif[0]}")
+                st.code(url_penanya)
+                st.success("Cetak QR ini dan tempel di lokasi kajian agar jamaah bisa scan & bertanya!")
+        else:
+            st.info("Belum ada kajian yang aktif → QR code akan muncul otomatis setelah ada kajian aktif.")
