@@ -154,10 +154,11 @@ else:  # Operator
     with tab3:
         st.success("QR Code Tetap 1 Selamanya!")
         # GANTI INI DENGAN IP/URL KAMU NANTI
-        url_base = "https://tanya-ustadz-abc.streamlit.app"  # Lokal dulu
+        url_base = "https://tanya-ustadz-hgzjzfktdaqhkmztftr8ch.streamlit.app/"  # Lokal dulu
         qr_data = f"{url_base}?penanya=yes"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={qr_data}"
         st.image(qr_url)
         st.code(qr_data)
         st.info("Scan QR ini → langsung ke Penanya. Setelah deploy, ganti url_base ke link Streamlit kamu.")
+
 
