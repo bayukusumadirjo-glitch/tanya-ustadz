@@ -6,49 +6,53 @@ from datetime import datetime
 conn = sqlite3.connect('kajian_qna.db', check_same_thread=False)
 c = conn.cursor()
 
-# Tabel kajian
-c.execute('''
-    CREATE TABLE IF NOT EXISTS kajian (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nama TEXT NOT NULL,
-        nama_ustadz TEXT,
-        tanggal_kajian TEXT,
-        tanggal_dibuat TEXT,
-        aktif INTEGER DEFAULT 0
-    )
-''')
+# Buat tabel kajian (versi lama)
+c.execute('''CREATE TABLE IF NOT EXISTS kajian (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama TEXT NOT NULL,
+                tanggal_dibuat TEXT,
+                aktif INTEGER DEFAULT 0
+             )''')
 
-# Tabel pertanyaan — DIPERBAIKI TOTAL!
-c.execute('''
-    CREATE TABLE IF NOT EXISTS pertanyaan (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        kajian_id INTEGER,
-        nama_penanya TEXT NOT NULL,
-        pertanyaan TEXT NOT NULL,
-        tanggal TEXT,
-        approved INTEGER DEFAULT 0,
-        FOREIGN KEY (kajian_id) REFERENCES kajian (id)
-    )
-''')
+# Tambahkan kolom baru jika belum ada (INI YANG MENYELAMATKAN!)
+try:
+    c.execute("ALTER TABLE kajian ADD COLUMN nama_ustadz TEXT")
+except sqlite3.OperationalError:
+    pass  # kolom sudah ada
+try:
+    c.execute("ALTER TABLE kajian ADD COLUMN tanggal_kajian TEXT")
+except sqlite3.OperationalError:
+    pass  # kolom sudah ada
+
+# Tabel pertanyaan
+c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kajian_id INTEGER,
+                nama_penanya TEXT NOT NULL,
+                pertanyaan TEXT NOT NULL,
+                tanggal TEXT,
+                approved INTEGER DEFAULT 0,
+                FOREIGN KEY (kajian_id) REFERENCES kajian (id)
+             )''')
 conn.commit()
 
 # === PASSWORD ===
 PASS_OPERATOR = "operator123"
 PASS_USTADZ   = "ustadz123"
 
-# === DETEKSI DARI QR ===
+# === DETEKSI QR ===
 if st.query_params.get("penanya") == "yes":
     is_penanya = True
 else:
     is_penanya = False
 
 # ===================================
-# MODE PENANYA (langsung dari QR)
+# MODE PENANYA
 # ===================================
 if is_penanya:
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
     st.title("Tanya Ustadz")
-    
+
     c.execute("SELECT nama, nama_ustadz, tanggal_kajian FROM kajian WHERE aktif = 1")
     aktif = c.fetchone()
     if not aktif:
@@ -71,8 +75,7 @@ if is_penanya:
                 tgl = datetime.now().strftime("%d/%m/%Y %H:%M")
                 c.execute("SELECT id FROM kajian WHERE aktif = 1")
                 kajian_id = c.fetchone()[0]
-                c.execute("""INSERT INTO pertanyaan (kajian_id, nama_penanya, pertanyaan, tanggal, approved)
-                             VALUES (?, ?, ?, ?, 0)""", 
+                c.execute("INSERT INTO pertanyaan (kajian_id, nama_penanya, pertanyaan, tanggal, approved) VALUES (?, ?, ?, ?, 0)",
                           (kajian_id, nama.strip(), pertanyaan.strip(), tgl))
                 conn.commit()
                 st.success(f"**Jawaban Anda sudah ditampung. Terima kasih, {nama.split()[0]}!**")
@@ -85,7 +88,7 @@ if is_penanya:
 st.set_page_config(page_title="Panel Kajian", layout="wide")
 st.title("Panel Operator & Ustadz")
 
-# Info kajian aktif di atas
+# Info kajian aktif
 c.execute("SELECT nama, nama_ustadz, tanggal_kajian FROM kajian WHERE aktif = 1")
 aktif_info = c.fetchone()
 if aktif_info:
@@ -95,7 +98,6 @@ if aktif_info:
 
 role = st.sidebar.selectbox("Pilih Role", ["Operator", "Ustadz"])
 
-# ==================== USTADZ ====================
 if role == "Ustadz":
     st.header("Dashboard Ustadz")
     pwd = st.sidebar.text_input("Password Ustadz", type="password")
@@ -110,8 +112,7 @@ if role == "Ustadz":
         st.write(f"Ustadz: **{aktif_info[1] or 'Anda'}** • Tanggal: **{aktif_info[2] or '-'}**")
         c.execute("SELECT id FROM kajian WHERE aktif = 1")
         kajian_id = c.fetchone()[0]
-        c.execute("""SELECT nama_penanya, pertanyaan, tanggal FROM pertanyaan
-                     WHERE kajian_id = ? AND approved = 1 ORDER BY tanggal ASC""", (kajian_id,))
+        c.execute("SELECT nama_penanya, pertanyaan, tanggal FROM pertanyaan WHERE kajian_id = ? AND approved = 1 ORDER BY tanggal ASC", (kajian_id,))
         data = c.fetchall()
         if not data:
             st.info("Belum ada pertanyaan yang di-approve.")
@@ -121,8 +122,7 @@ if role == "Ustadz":
                 st.write(q)
                 st.divider()
 
-# ==================== OPERATOR ====================
-else:
+else:  # OPERATOR
     st.header("Dashboard Operator")
     pwd = st.sidebar.text_input("Password Operator", type="password")
     if pwd != PASS_OPERATOR:
@@ -131,7 +131,6 @@ else:
 
     tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Code Tetap"])
 
-    # TAB 1 — Kelola Kajian
     with tab1:
         st.subheader("Buat Kajian Baru")
         nama_kajian = st.text_input("Nama Kajian")
@@ -169,10 +168,9 @@ else:
                 c.execute("DELETE FROM pertanyaan WHERE kajian_id = ?", (idk,))
                 c.execute("DELETE FROM kajian WHERE id = ?", (idk,))
                 conn.commit()
-                st.success("Kajian & semua pertanyaan dihapus!")
+                st.success("Kajian & pertanyaan dihapus!")
                 st.rerun()
 
-    # TAB 2 — Moderasi
     with tab2:
         if aktif_info:
             st.write(f"**Moderasi — {aktif_info[0]}**")
@@ -197,16 +195,15 @@ else:
         else:
             st.info("Belum ada kajian aktif.")
 
-    # TAB 3 — QR Code Tetap 1 Selamanya
     with tab3:
         st.success("QR CODE TETAP 1 SELAMANYA")
         st.write("Cetak sekali → pakai untuk semua kajian!")
 
         # GANTI INI SETELAH DEPLOY
-        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"  # ← UBAH JADI LINK KAMU
+        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"  # UBAH JADI LINK KAMU
         qr_link = f"{LINK_KAMU}?penanya=yes"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={qr_link}"
 
         st.image(qr_url, width=350)
         st.code(qr_link)
-        st.markdown("**Scan QR ini → langsung masuk mode Penanya (tanpa sidebar)**")
+        st.markdown("**Scan = langsung masuk mode Penanya**")
