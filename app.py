@@ -35,7 +35,7 @@ else:
     is_penanya = False
 
 # ===================================
-# MODE PENANYA (langsung dari QR)
+# MODE PENANYA (dari QR)
 # ===================================
 if is_penanya:
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
@@ -53,7 +53,6 @@ if is_penanya:
     with st.form("form_tanya"):
         nama = st.text_input("Nama Anda (wajib)", placeholder="Ahmad / Ummu Aisyah")
         pertanyaan = st.text_area("Pertanyaan Anda", height=150, placeholder="Tuliskan dengan jelas dan sopan...")
-
         kirim = st.form_submit_button("Kirim Pertanyaan", use_container_width=True)
 
         if kirim:
@@ -61,8 +60,7 @@ if is_penanya:
                 st.error("Nama dan pertanyaan wajib diisi!")
             else:
                 tgl = datetime.now().strftime("%d/%m/%Y %H:%M")
-                c.execute("""INSERT INTO pertanyaan 
-                             (kajian_id, nama_penanya, pertanyaan, tanggal, approved) 
+                c.execute("""INSERT INTO pertanyaan (kajian_id, nama_penanya, pertanyaan, tanggal, approved) 
                              VALUES (?, ?, ?, ?, 0)""",
                           (aktif[0], nama.strip(), pertanyaan.strip(), tgl))
                 conn.commit()
@@ -78,7 +76,6 @@ st.title("Panel Operator & Ustadz")
 
 role = st.sidebar.selectbox("Pilih Role", ["Operator", "Ustadz"])
 
-# ==================== USTADZ ====================
 if role == "Ustadz":
     st.header("Dashboard Ustadz")
     pwd = st.sidebar.text_input("Password Ustadz", type="password")
@@ -92,9 +89,8 @@ if role == "Ustadz":
         st.info("Belum ada kajian aktif.")
     else:
         st.success(f"Kajian aktif: **{aktif[1]}**")
-        c.execute("""SELECT nama_penanya, pertanyaan, tanggal 
-                     FROM pertanyaan WHERE kajian_id = ? AND approved = 1 
-                     ORDER BY tanggal ASC""", (aktif[0],))
+        c.execute("""SELECT nama_penanya, pertanyaan, tanggal FROM pertanyaan 
+                     WHERE kajian_id = ? AND approved = 1 ORDER BY tanggal ASC""", (aktif[0],))
         data = c.fetchall()
         if not data:
             st.info("Belum ada pertanyaan yang di-approve.")
@@ -104,8 +100,7 @@ if role == "Ustadz":
                 st.write(q)
                 st.divider()
 
-# ==================== OPERATOR ====================
-else:
+else:  # OPERATOR
     st.header("Dashboard Operator")
     pwd = st.sidebar.text_input("Password Operator", type="password")
     if pwd != PASS_OPERATOR:
@@ -114,7 +109,6 @@ else:
 
     tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Code Tetap"])
 
-    # TAB 1 — Kelola Kajian
     with tab1:
         st.subheader("Buat Kajian Baru")
         nama_baru = st.text_input("Nama kajian")
@@ -147,10 +141,9 @@ else:
                 c.execute("DELETE FROM pertanyaan WHERE kajian_id = ?", (idk,))
                 c.execute("DELETE FROM kajian WHERE id = ?", (idk,))
                 conn.commit()
-                st.success("Kajian & semua pertanyaan dihapus!")
+                st.success("Kajian dihapus!")
                 st.rerun()
 
-    # TAB 2 — Moderasi
     with tab2:
         c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
         aktif = c.fetchone()
@@ -174,10 +167,17 @@ else:
         else:
             st.info("Belum ada kajian aktif.")
 
-    # TAB 3 — QR Code Tetap 1 Selamanya (SUDAH DIPERBAIKI!)
+    # TAB QR — INI YANG DIPERBAIKI TOTAL!
     with tab3:
         st.success("QR CODE TETAP 1 SELAMANYA")
-        st.write("Cetak sekali → pakai untuk semua kajian!")
+        st.write("Cetak sekali → pakai selamanya untuk semua kajian!")
 
-        # GANTI INI DENGAN LINK STREAMLIT KAMU SETELAH DEPLOY
-        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"   # ← U
+        # GANTI BARIS INI SETELAH DEPLOY
+        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"   # UBAH INI JADI LINK KAMU
+
+        qr_link = f"{LINK_KAMU}?penanya=yes"
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={qr_link}"
+
+        st.image(qr_url, width=350)
+        st.code(qr_link)
+        st.markdown("**Scan QR ini → langsung masuk mode Penanya (tanpa sidebar)**")
