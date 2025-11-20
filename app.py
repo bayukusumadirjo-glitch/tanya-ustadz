@@ -39,7 +39,7 @@ else:
 # ===================================
 if is_penanya:
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
-    st.title("🙋 Tanya Ustadz")
+    st.title("Tanya Ustadz")
     st.info("Scan QR kode kajian → ajukan pertanyaan Anda (nama wajib).")
 
     c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
@@ -154,11 +154,12 @@ else:  # Operator
     with tab3:
         st.success("QR Code Tetap 1 Selamanya!")
         # GANTI INI DENGAN IP/URL KAMU NANTI
-        url_base = "https://tanya-ustadz-hgzjzfktdaqhkmztftr8ch.streamlit.app/"  # Lokal dulu
+        url_base = "https://tanya-ustadz-dirj.streamlit.app/"  # Lokal dulu
         qr_data = f"{url_base}?penanya=yes"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={qr_data}"
         st.image(qr_url)
         st.code(qr_data)
         st.info("Scan QR ini → langsung ke Penanya. Setelah deploy, ganti url_base ke link Streamlit kamu.")
+
 
 
