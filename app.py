@@ -6,7 +6,7 @@ from datetime import datetime
 conn = sqlite3.connect('kajian_qna.db', check_same_thread=False)
 c = conn.cursor()
 
-# Buat tabel kajian (versi lama)
+# Tabel kajian (versi lama)
 c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nama TEXT NOT NULL,
@@ -14,15 +14,15 @@ c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 aktif INTEGER DEFAULT 0
              )''')
 
-# Tambahkan kolom baru jika belum ada (INI YANG MENYELAMATKAN!)
+# Tambah kolom baru jika belum ada (biar tidak error)
 try:
     c.execute("ALTER TABLE kajian ADD COLUMN nama_ustadz TEXT")
 except sqlite3.OperationalError:
-    pass  # kolom sudah ada
+    pass
 try:
     c.execute("ALTER TABLE kajian ADD COLUMN tanggal_kajian TEXT")
 except sqlite3.OperationalError:
-    pass  # kolom sudah ada
+    pass
 
 # Tabel pertanyaan
 c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
@@ -47,7 +47,7 @@ else:
     is_penanya = False
 
 # ===================================
-# MODE PENANYA
+# MODE PENANYA (dari QR)
 # ===================================
 if is_penanya:
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
@@ -96,14 +96,36 @@ if aktif_info:
     col1.success(f"KAJIAN AKTIF: {aktif_info[0]}")
     col2.info(f"Ustadz: {aktif_info[1] or '-'} • {aktif_info[2] or ''}")
 
+# Pilih Role
 role = st.sidebar.selectbox("Pilih Role", ["Operator", "Ustadz"])
 
-if role == "Ustadz":
+# ==================== LOGIN DENGAN TOMBOL MASUK ====================
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.sidebar.header(f"Login sebagai {role}")
+    password = st.sidebar.text_input("Password", type="password", key=f"pwd_{role}")
+    login_btn = st.sidebar.button("Masuk", type="primary", use_container_width=True)
+
+    if login_btn:
+        if role == "Operator" and password == PASS_OPERATOR:
+            st.session_state.logged_in = True
+            st.session_state.role = "Operator"
+            st.success("Login Operator berhasil!")
+            st.rerun()
+        elif role == "Ustadz" and password == PASS_USTADZ:
+            st.session_state.logged_in = True
+            st.session_state.role = "Ustadz"
+            st.success("Login Ustadz berhasil!")
+            st.rerun()
+        else:
+            st.sidebar.error("Password salah!")
+    st.stop()
+
+# ==================== JIKA SUDAH LOGIN ====================
+if st.session_state.role == "Ustadz":
     st.header("Dashboard Ustadz")
-    pwd = st.sidebar.text_input("Password Ustadz", type="password")
-    if pwd != PASS_USTADZ:
-        st.error("Password salah!")
-        st.stop()
 
     if not aktif_info:
         st.info("Belum ada kajian aktif.")
@@ -124,11 +146,6 @@ if role == "Ustadz":
 
 else:  # OPERATOR
     st.header("Dashboard Operator")
-    pwd = st.sidebar.text_input("Password Operator", type="password")
-    if pwd != PASS_OPERATOR:
-        st.error("Password salah!")
-        st.stop()
-
     tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Code Tetap"])
 
     with tab1:
@@ -168,7 +185,7 @@ else:  # OPERATOR
                 c.execute("DELETE FROM pertanyaan WHERE kajian_id = ?", (idk,))
                 c.execute("DELETE FROM kajian WHERE id = ?", (idk,))
                 conn.commit()
-                st.success("Kajian & pertanyaan dihapus!")
+                st.success("Kajian dihapus!")
                 st.rerun()
 
     with tab2:
@@ -197,13 +214,18 @@ else:  # OPERATOR
 
     with tab3:
         st.success("QR CODE TETAP 1 SELAMANYA")
-        st.write("Cetak sekali → pakai untuk semua kajian!")
+        st.write("Cetak sekali → pakai selamanya!")
 
-        # GANTI INI SETELAH DEPLOY
-        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"  # UBAH JADI LINK KAMU
+        LINK_KAMU = "https://tanya-ustadz-dirj.streamlit.app"  # GANTI SETELAH DEPLOY
         qr_link = f"{LINK_KAMU}?penanya=yes"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={qr_link}"
 
         st.image(qr_url, width=350)
         st.code(qr_link)
-        st.markdown("**Scan = langsung masuk mode Penanya**")
+        st.markdown("**Scan QR ini → langsung masuk mode Penanya**")
+
+# Tombol Logout
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    del st.session_state.role
+    st.rerun()
