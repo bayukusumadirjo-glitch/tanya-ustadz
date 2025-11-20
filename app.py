@@ -39,7 +39,7 @@ role = st.sidebar.selectbox("Pilih Role Anda", ["Penanya", "Ustadz", "Operator"]
 # 1. ROLE PENANYA (scan QR dulu → langsung ke halaman ini)
 # ===================================
 if role == "Penanya":
-    st.header("🙋 Ajukan Pertanyaan Anda")
+    st.header("Ajukan Pertanyaan Anda")
     st.info("Anda masuk melalui scan QR kode kajian. Pertanyaan Anda akan dimoderasi oleh operator sebelum ditampilkan kepada Ustadz.")
 
     # Ambil kajian yang aktif (hanya boleh ada 1 yang aktif)
@@ -197,3 +197,4 @@ else:  # Operator
                 st.success("Cetak QR ini dan tempel di lokasi kajian agar jamaah bisa scan & bertanya!")
         else:
             st.info("Belum ada kajian yang aktif → QR code akan muncul otomatis setelah ada kajian aktif.")
+
