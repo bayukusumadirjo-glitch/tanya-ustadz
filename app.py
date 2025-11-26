@@ -39,18 +39,22 @@ c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
 conn.commit()
 
 # ===================================
-# FUNGSI FORMAT TANGGAL INDONESIA (Lengkap Jam)
+# FUNGSI FORMAT TANGGAL (TANPA JAM)
 # ===================================
-def format_tanggal_lengkap(tanggal_str):
+def format_tanggal_hanya(tanggal_str):
     if not tanggal_str:
-        return "Waktu tidak diketahui"
+        return "Tanggal tidak diketahui"
     try:
-        # Format dari SQLite: 2025-12-26 14:30:25.123456
         dt = datetime.strptime(tanggal_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
         bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
-        return f"{dt.day} {bulan[dt.month-1]} {dt.year}, {dt.strftime('%H:%M')}"
+        return f"{dt.day} {bulan[dt.month-1]} {dt.year}"
     except:
-        return tanggal_str
+        try:
+            dt = datetime.strptime(tanggal_str, "%Y-%m-%d")
+            bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+            return f"{dt.day} {bulan[dt.month-1]} {dt.year}"
+        except:
+            return tanggal_str.split(' ')[0]
 
 # ===================================
 # KONFIGURASI
@@ -75,7 +79,7 @@ if st.query_params.get("penanya") == "yes":
         st.stop()
 
     ustadz_nama = aktif[2] if aktif[2] else "Ustadz"
-    tgl_kajian = format_tanggal_lengkap(aktif[3]) if aktif[3] else "Tanggal belum ditentukan"
+    tgl_kajian = format_tanggal_hanya(aktif[3]) if aktif[3] else "Tanggal belum ditentukan"
 
     st.success(f"KAJIAN: **{aktif[1]}**")
     st.info(f"**{ustadz_nama}** • {tgl_kajian}")
@@ -103,7 +107,7 @@ if st.query_params.get("penanya") == "yes":
 # ===================================
 st.set_page_config(page_title="KajianQNA - Panel", layout="wide")
 st.title("KajianQNA – Panel Ustadz & Operator")
-st.caption(f"Hari ini: **{datetime.now().strftime('%A, %d %B %Y | %H:%M')}**")
+st.caption(f"Hari ini: **{datetime.now().strftime('%A, %d %B %Y')}**")
 
 # Login
 if "logged_in" not in st.session_state:
@@ -137,7 +141,7 @@ if st.sidebar.button("Logout"):
     st.rerun()
 
 # ===================================
-# DASHBOARD USTADZ — ADA TANGGAL & JAM PERTANYAAN MASUK!
+# DASHBOARD USTADZ — TANPA JAM, HANYA TANGGAL!
 # ===================================
 if st.session_state.role == "Ustadz":
     st.header("Dashboard Ustadz")
@@ -146,7 +150,7 @@ if st.session_state.role == "Ustadz":
     aktif = c.fetchone()
     if aktif:
         st.success(f"KAJIAN AKTIF: **{aktif[0]}**")
-        st.info(f"**{aktif[1] or 'Ustadz'}** • {format_tanggal_lengkap(aktif[2]) if aktif[2] else 'Tanggal belum ditentukan'}")
+        st.info(f"**{aktif[1] or 'Ustadz'}** • {format_tanggal_hanya(aktif[2]) if aktif[2] else 'Tanggal belum ditentukan'}")
     else:
         st.warning("Belum ada kajian aktif")
         st.stop()
@@ -165,14 +169,14 @@ if st.session_state.role == "Ustadz":
         st.info("Belum ada pertanyaan yang di-approve.")
     else:
         for nama, pertanyaan, tgl in rows:
-            waktu = format_tanggal_lengkap(tgl)
+            tanggal_saja = format_tanggal_hanya(tgl)
             with st.container(border=True):
                 st.write(f"**{nama}**")
-                st.caption(f"{waktu}")
+                st.caption(tanggal_saja)
                 st.markdown(pertanyaan)
 
 # ===================================
-# DASHBOARD OPERATOR (tetap sama + fitur lengkap)
+# DASHBOARD OPERATOR (tetap lengkap)
 # ===================================
 elif st.session_state.role == "Operator":
     st.header("Dashboard Operator")
@@ -197,7 +201,7 @@ elif st.session_state.role == "Operator":
         c.execute("SELECT id, nama, ustadz, tanggal_kajian, aktif FROM kajian ORDER BY id DESC")
         for k in c.fetchall():
             kajian_id, nama, ustadz_n, tgl, aktif = k
-            with st.expander(f"**{nama}** • {ustadz_n or 'Ustadz'} • {format_tanggal_lengkap(tgl) if tgl else '-'}"):
+            with st.expander(f"**{nama}** • {ustadz_n or 'Ustadz'} • {format_tanggal_hanya(tgl) if tgl else '-'}"):
                 col1, col2, col3, col4 = st.columns(4)
                 if col1.button("Edit", key=f"edit_{kajian_id}"):
                     st.session_state.edit_id = kajian_id
@@ -222,9 +226,8 @@ elif st.session_state.role == "Operator":
                     st.session_state.hapus_nama = nama
                     st.rerun()
 
-        # Konfirmasi Hapus + Form Edit (sama seperti sebelumnya)
         if "hapus_id" in st.session_state:
-            st.error(f"Yakin HAPUS kajian: **{st.session_state.hapus_nama}**?")
+            st.error(f"Yakin ingin HAPUS kajian: **{st.session_state.hapus_nama}**?")
             c1, c2 = st.columns(2)
             if c1.button("YA, HAPUS", type="primary"):
                 c.execute("DELETE FROM pertanyaan WHERE kajian_id = ?", (st.session_state.hapus_id,))
@@ -266,11 +269,11 @@ elif st.session_state.role == "Operator":
         if not aktif:
             st.info("Belum ada kajian aktif.")
         else:
-            st.write(f"Moderasi untuk: **{aktif[1]}** • {aktif[2] or 'Ustadz'} • {format_tanggal_lengkap(aktif[3]) if aktif[3] else '-'}")
+            st.write(f"Moderasi untuk: **{aktif[1]}** • {aktif[2] or 'Ustadz'} • {format_tanggal_hanya(aktif[3]) if aktif[3] else '-'}")
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
             for q in c.fetchall():
                 with st.container(border=True):
-                    st.write(f"**{q[1]}** • {format_tanggal_lengkap(q[3])}")
+                    st.write(f"**{q[1]}** • {format_tanggal_hanya(q[3])}")
                     st.info(q[2])
                     c1, c2 = st.columns(2)
                     if q[4] == 0 and c1.button("Approve", key=f"app_{q[0]}"):
@@ -292,4 +295,4 @@ elif st.session_state.role == "Operator":
         c1.image(qr, caption="Scan untuk bertanya")
         c2.code(link)
 
-st.sidebar.caption("KajianQNA • Final + Tanggal Jam di Ustadz • Barokah")
+st.sidebar.caption("KajianQNA • Final • Tanpa Jam di Ustadz • Barokah")
