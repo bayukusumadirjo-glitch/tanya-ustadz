@@ -4,20 +4,34 @@ from datetime import datetime
 import urllib.parse
 
 # ===================================
-# DATABASE — DITAMBAH KOLOM ustadz & tanggal_kajian
+# KONEKSI + UPGRADE DATABASE OTOMATIS (INI RAHASIANYA!)
 # ===================================
 conn = sqlite3.connect('kajian_qna.db', check_same_thread=False)
 c = conn.cursor()
 
+# Buat tabel kajian kalau belum ada (versi lama)
 c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nama TEXT NOT NULL,
-                ustadz TEXT,
-                tanggal_kajian TEXT,
                 tanggal_dibuat TEXT DEFAULT (datetime('now')),
                 aktif INTEGER DEFAULT 0
              )''')
 
+# Tambahkan kolom ustadz kalau belum ada
+try:
+    c.execute("ALTER TABLE kajian ADD COLUMN ustadz TEXT")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass  # Kolom sudah ada
+
+# Tambahkan kolom tanggal_kajian kalau belum ada
+try:
+    c.execute("ALTER TABLE kajian ADD COLUMN tanggal_kajian TEXT")
+    conn.commit()
+except sqlite3.OperationalError:
+    pass  # Kolom sudah ada
+
+# Tabel pertanyaan
 c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 kajian_id INTEGER,
@@ -99,7 +113,7 @@ st.set_page_config(page_title="KajianQNA - Panel", layout="wide")
 st.title("KajianQNA – Panel Ustadz & Operator")
 st.caption(f"Hari ini: **{datetime.now().strftime('%A, %d %B %Y | %H:%M')}**")
 
-# Login session
+# Login
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "role" not in st.session_state:
@@ -238,4 +252,4 @@ elif st.session_state.role == "Operator":
         col2.code(link)
         st.info("QR ini otomatis mengikuti kajian aktif!")
 
-st.sidebar.caption("KajianQNA • Final + Ustadz & Tanggal • Barokah • Jazakumullah khoiron")
+st.sidebar.caption("KajianQNA • Final • Ustadz + Tanggal • 100% Stabil")
