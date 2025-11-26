@@ -1,155 +1,162 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
-from flask_sqlalchemy import SQLAlchemy
+import streamlit as st
+import sqlite3
 from datetime import datetime
 
-app = Flask(__name__)
-app.secret_key = 'rahasia123'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///kajian.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# === DATABASE ===
+conn = sqlite3.connect('kajian_qna.db', check_same_thread=False)
+c = conn.cursor()
 
-db = SQLAlchemy(app)
+c.execute('''CREATE TABLE IF NOT EXISTS kajian (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama TEXT NOT NULL,
+                tanggal_dibuat TEXT,
+                aktif INTEGER DEFAULT 0
+             )''')
 
-# Models
-class Kajian(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nama = db.Column(db.String(200), nullable=False, unique=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kajian_id INTEGER,
+                nama_penanya TEXT NOT NULL,
+                pertanyaan TEXT NOT NULL,
+                tanggal TEXT,
+                approved INTEGER DEFAULT 0,
+                FOREIGN KEY (kajian_id) REFERENCES kajian (id)
+             )''')
+conn.commit()
 
-class Pertanyaan(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nama_penanya = db.Column(db.String(100), nullable=False)
-    isi = db.Column(db.Text, nullable=False)
-    tanggal = db.Column(db.DateTime, default=datetime.utcnow)
-    kajian_id = db.Column(db.Integer, db.ForeignKey('kajian.id'), nullable=False)
-    approved = db.Column(db.Boolean, default=False)
+# === PASSWORD ===
+PASS_OPERATOR = "operator123"
+PASS_USTADZ = "ustadz123"
 
-# Buat database pertama kali
-with app.app_context():
-    db.create_all()
+# === DETEKSI QR: Jika ?penanya=yes → langsung Penanya ===
+if st.query_params.get("penanya") == "yes":
+    is_penanya = True
+else:
+    is_penanya = False
 
-# === HALAMAN PUBLIK (PENANYA) ===
-@app.route('/')
-def index():
-    kajians = Kajian.query.all()
-    return render_template('index.html', kajians=kajians)
+# ===================================
+# MODE PENANYA (dari QR)
+# ===================================
+if is_penanya:
+    st.set_page_config(page_title="Tanya Ustadz", layout="centered")
+    st.title("🙋 Tanya Ustadz")
+    st.info("Scan QR kode kajian → ajukan pertanyaan Anda (nama wajib).")
 
-@app.route('/submit/<int:kajian_id>', methods=['GET', 'POST'])
-def submit(kajian_id):
-    kajian = Kajian.query.get_or_404(kajian_id)
-    if request.method == 'POST':
-        nama = request.form['nama']
-        isi = request.form['pertanyaan']
+    c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
+    aktif = c.fetchone()
+    if not aktif:
+        st.warning("❌ Belum ada kajian aktif. Hubungi operator.")
+        st.stop()
 
-        if not nama.strip() or not isi.strip():
-            flash('Nama dan pertanyaan harus diisi!', 'error')
-            return redirect(url_for('submit', kajian_id=kajian_id))
+    st.success(f"📌 Kajian: **{aktif[1]}**")
 
-        p = Pertanyaan(nama_penanya=nama, isi=isi, kajian_id=kajian_id)
-        db.session.add(p)
-        db.session.commit()
-        flash('Pertanyaan berhasil dikirim! Menunggu moderasi operator.', 'success')
-        return redirect(url_for('index'))
+    with st.form("form_tanya"):
+        nama = st.text_input("Nama Anda", placeholder="Ahmad S. / Ibu Fatimah")
+        pertanyaan = st.text_area("Pertanyaan Anda", height=150, placeholder="Tuliskan dengan sopan...")
+        submitted = st.form_submit_button("Kirim Pertanyaan")
 
-    return render_template('submit.html', kajian=kajian)
+        if submitted:
+            if not nama.strip() or not pertanyaan.strip():
+                st.error("Nama & pertanyaan wajib!")
+            else:
+                tanggal = datetime.now().strftime("%d-%m-%Y %H:%M")
+                c.execute("INSERT INTO pertanyaan (kajian_id, nama_penanya, pertanyaan, tanggal, approved) VALUES (?, ?, ?, ?, 0)",
+                          (aktif[0], nama.strip(), pertanyaan.strip(), tanggal))
+                conn.commit()
+                st.success("✅ Terima kasih! Tunggu moderasi.")
+                st.balloons()
+    st.stop()
 
-# === LOGIN ===
-@app.route('/login/<role>', methods=['GET', 'POST'])
-def login(role):
-    if role not in ['operator', 'ustadz']:
-        return "Role tidak valid"
+# ===================================
+# PANEL USTADZ & OPERATOR
+# ===================================
+st.set_page_config(page_title="Panel", layout="wide")
+st.title("👳‍♂️ Panel Ustadz & Operator")
 
-    if request.method == 'POST':
-        password = request.form['password']
+role = st.sidebar.selectbox("Pilih Role", ["Ustadz", "Operator"])
 
-        if role == 'operator' and password == 'operator123':  # ← ganti password di sini jika mau
-            session['role'] = 'operator'
-            return redirect(url_for('operator_dashboard'))
-        elif role == 'ustadz' and password == 'ustadz123':      # ← ganti password di sini jika mau
-            session['role'] = 'ustadz'
-            return redirect(url_for('ustadz_dashboard'))
+if role == "Ustadz":
+    st.header("Dashboard Ustadz")
+    pwd = st.sidebar.text_input("Password", type="password")
+    if pwd != PASS_USTADZ:
+        st.error("Password salah!")
+        st.stop()
+
+    c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
+    aktif = c.fetchone()
+    if not aktif:
+        st.info("Tidak ada kajian aktif.")
+    else:
+        st.success(f"Kajian: **{aktif[1]}**")
+        c.execute("SELECT nama_penanya, pertanyaan, tanggal FROM pertanyaan WHERE kajian_id = ? AND approved = 1 ORDER BY tanggal", (aktif[0],))
+        data = c.fetchall()
+        if not data:
+            st.info("Belum ada pertanyaan approved.")
         else:
-            flash('Password salah!', 'error')
+            for i, (n, q, t) in enumerate(data, 1):
+                st.markdown(f"**{i}. {n}** — _{t}_")
+                st.write(q)
+                st.divider()
 
-    return render_template('login.html', role=role.capitalize())
+else:  # Operator
+    st.header("Dashboard Operator")
+    pwd = st.sidebar.text_input("Password", type="password")
+    if pwd != PASS_OPERATOR:
+        st.error("Password salah!")
+        st.stop()
 
-@app.route('/logout')
-def logout():
-    session.pop('role', None)
-    return redirect(url_for('index'))
+    tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Code Tetap"])
 
-# === OPERATOR ===
-@app.route('/operator')
-def operator_dashboard():
-    if session.get('role') != 'operator':
-        return redirect(url_for('login', role='operator'))
+    with tab1:
+        st.subheader("Buat Kajian Baru")
+        nama = st.text_input("Nama kajian")
+        if st.button("Buat") and nama:
+            c.execute("INSERT INTO kajian (nama, tanggal_dibuat, aktif) VALUES (?, ?, 0)", (nama, datetime.now().strftime("%d-%m-%Y %H:%M")))
+            conn.commit()
+            st.success("Dibuat!")
+            st.rerun()
 
-    kajians = Kajian.query.all()
-    return render_template('operator_dashboard.html', kajians=kajians)
+        st.subheader("Aktifkan Kajian")
+        c.execute("SELECT id, nama, aktif FROM kajian ORDER BY id DESC")
+        for k in c.fetchall():
+            col1, col2 = st.columns([4,1])
+            status = "🟢 Aktif" if k[2] else "⚪"
+            col1.write(f"**{k[1]}** — {status}")
+            if col2.button("Aktifkan", key=k[0]):
+                c.execute("UPDATE kajian SET aktif = 0")
+                c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (k[0],))
+                conn.commit()
+                st.rerun()
 
-@app.route('/operator/create', methods=['GET', 'POST'])
-def create_kajian():
-    if session.get('role') != 'operator':
-        return redirect(url_for('login', role='operator'))
-
-    if request.method == 'POST':
-        nama = request.form['nama'].strip()
-        if Kajian.query.filter_by(nama=nama).first():
-            flash('Nama kajian sudah ada!', 'error')
+    with tab2:
+        c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
+        aktif = c.fetchone()
+        if aktif:
+            st.write(f"Moderasi: **{aktif[1]}**")
+            c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
+            for q in c.fetchall():
+                status = "✅ Approved" if q[4] else "⏳ Menunggu"
+                with st.expander(f"{q[1]} — {q[3]} — {status}"):
+                    st.write(q[2])
+                    if q[4] == 0:
+                        col1, col2 = st.columns(2)
+                        if col1.button("Approve", key=f"a{q[0]}"):
+                            c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (q[0],))
+                            conn.commit()
+                            st.rerun()
+                        if col2.button("Hapus", key=f"d{q[0]}"):
+                            c.execute("DELETE FROM pertanyaan WHERE id = ?", (q[0],))
+                            conn.commit()
+                            st.rerun()
         else:
-            k = Kajian(nama=nama)
-            db.session.add(k)
-            db.session.commit()
-            flash('Kajian berhasil dibuat!', 'success')
-        return redirect(url_for('operator_dashboard'))
+            st.info("Belum ada kajian aktif.")
 
-    return render_template('create_kajian.html')
-
-@app.route('/operator/manage/<int:kajian_id>')
-def manage(kajian_id):
-    if session.get('role') != 'operator':
-        return redirect(url_for('login', role='operator'))
-
-    kajian = Kajian.query.get_or_404(kajian_id)
-    pertanyaans = Pertanyaan.query.filter_by(kajian_id=kajian_id).order_by(Pertanyaan.tanggal.desc()).all()
-    return render_template('manage.html', kajian=kajian, pertanyaans=pertanyaans)
-
-@app.route('/operator/approve/<int:p_id>')
-def approve(p_id):
-    if session.get('role') != 'operator':
-        return redirect(url_for('login', role='operator'))
-    p = Pertanyaan.query.get_or_404(p_id)
-    p.approved = True
-    db.session.commit()
-    flash('Pertanyaan di-approve')
-    return redirect(url_for('manage', kajian_id=p.kajian_id))
-
-@app.route('/operator/delete/<int:p_id>')
-def delete(p_id):
-    if session.get('role') != 'operator':
-        return redirect(url_for('login', role='operator'))
-    p = Pertanyaan.query.get_or_404(p_id)
-    db.session.delete(p)
-    db.session.commit()
-    flash('Pertanyaan dihapus')
-    return redirect(url_for('manage', kajian_id=p.kajian_id))
-
-# === USTADZ ===
-@app.route('/ustadz')
-def ustadz_dashboard():
-    if session.get('role') != 'ustadz':
-        return redirect(url_for('login', role='ustadz'))
-
-    kajians = Kajian.query.all()
-    return render_template('ustadz_dashboard.html', kajians=kajians)
-
-@app.route('/ustadz/view/<int:kajian_id>')
-def view_kajian(kajian_id):
-    if session.get('role') != 'ustadz':
-        return redirect(url_for('login', role='ustadz'))
-
-    kajian = Kajian.query.get_or_404(kajian_id)
-    pertanyaans = Pertanyaan.query.filter_by(kajian_id=kajian_id, approved=True).order_by(Pertanyaan.tanggal.desc()).all()
-    return render_template('view_ustadz.html', kajian=kajian, pertanyaans=pertanyaans)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    with tab3:
+        st.success("QR Code Tetap 1 Selamanya!")
+        # GANTI INI DENGAN IP/URL KAMU NANTI
+        url_base = "http://localhost:8501"  # Lokal dulu
+        qr_data = f"{url_base}?penanya=yes"
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=500x500&data={qr_data}"
+        st.image(qr_url)
+        st.code(qr_data)
+        st.info("Scan QR ini → langsung ke Penanya. Setelah deploy, ganti url_base ke link Streamlit kamu.")
