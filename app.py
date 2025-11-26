@@ -139,7 +139,8 @@ if st.session_state.role == "Ustadz":
         st.info("Belum ada pertanyaan yang di-approve.")
     else:
         for nama, isi, tgl in rows:
-            with st.expander(f"{nama} • {tgl.split('.')[0] if '.' in tgl else tgl}"):
+            tgl_display = tgl.split('.')[0] if tgl and '.' in tgl else (tgl or "Tanggal tidak tersedia")
+            with st.expander(f"{nama} • {tgl_display}"):
                 st.write(isi)
 
 # ===================================
@@ -201,8 +202,9 @@ elif st.session_state.role == "Operator":
                 st.success("Semua pertanyaan sudah dimoderasi!")
             else:
                 for p in waiting:
+                    tgl_display = p[3].split('.')[0] if p[3] and '.' in p[3] else (p[3] or "Tanggal tidak tersedia")
                     with st.container(border=True):
-                        st.write(f"**{p[1]}** • {p[3].split('.')[0]}")
+                        st.write(f"**{p[1]}** • {tgl_display}")
                         st.info(p[2])
                         c1, c2 = st.columns(2)
                         if c1.button("Approve", key=f"ok_{p[0]}"):
