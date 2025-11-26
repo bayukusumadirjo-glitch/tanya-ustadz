@@ -2,7 +2,6 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 import urllib.parse
-import time
 
 # ===================================
 # DATABASE
@@ -46,14 +45,14 @@ if st.query_params.get("penanya") == "yes":
 
     if not aktif:
         st.error("Belum ada kajian aktif.")
-        st.info("Hubungi operator.")
+        st.info("Silakan hubungi operator masjid.")
         st.stop()
 
-    st.success(f"KAJIAN: **{aktif[1]}**")
+    st.success(f"KAJIAN AKTIF: **{aktif[1]}**")
 
     with st.form("form_tanya"):
-        nama = st.text_input("Nama Anda *")
-        pertanyaan = st.text_area("Pertanyaan Anda *", height=150)
+        nama = st.text_input("Nama Anda *", placeholder="Ahmad / Ibu Fatimah")
+        pertanyaan = st.text_area("Pertanyaan Anda *", height=150, placeholder="Tuliskan dengan ikhlas dan sopan...")
         kirim = st.form_submit_button("Kirim Pertanyaan", type="primary")
 
         if kirim:
@@ -66,11 +65,11 @@ if st.query_params.get("penanya") == "yes":
                 st.success("Pertanyaan berhasil dikirim! Menunggu moderasi.")
                 st.toast("Terima kasih sudah bertanya — Jazakumullah khoiron katsiro")
 
-    st.caption("KajianQNA • Aman • Real-time")
+    st.caption("KajianQNA • Aman • Terfilter • Rahasia Terjaga")
     st.stop()
 
 # ===================================
-# DASHBOARD UTAMA + AUTO REFRESH AMAN (TANPA st.rerun_every)
+# DASHBOARD UTAMA — TANPA AUTO REFRESH
 # ===================================
 st.set_page_config(page_title="KajianQNA - Panel", layout="wide")
 st.title("KajianQNA – Panel Ustadz & Operator")
@@ -85,9 +84,9 @@ if "role" not in st.session_state:
 # LOGIN
 # ===================================
 if not st.session_state.logged_in:
-    st.sidebar.header("Login")
-    role = st.sidebar.radio("Role", ["Operator", "Ustadz"])
-    pwd  = st.sidebar.text_input("Password", type="password")
+    st.sidebar.header("Login Panel")
+    role = st.sidebar.radio("Pilih Role", ["Operator", "Ustadz"])
+    pwd = st.sidebar.text_input("Password", type="password")
     if st.sidebar.button(f"Masuk sebagai {role}", type="primary", use_container_width=True):
         if role == "Operator" and pwd == PASS_OPERATOR:
             st.session_state.logged_in = True
@@ -101,26 +100,17 @@ if not st.session_state.logged_in:
             st.error("Password salah!")
     st.stop()
 
-st.sidebar.success(f"**{st.session_state.role}**")
+# Status login + tombol refresh manual
+st.sidebar.success(f"Login sebagai: **{st.session_state.role}**")
+if st.sidebar.button("Refresh Data Sekarang", type="primary", use_container_width=True):
+    st.rerun()
 if st.sidebar.button("Logout"):
     st.session_state.logged_in = False
     st.session_state.role = None
     st.rerun()
 
-# AUTO REFRESH COUNTDOWN — AMAN DI SEMUA VERSI
-if st.session_state.logged_in:
-    # Countdown 5 detik di sidebar
-    st.sidebar.markdown("---")
-    st.sidebar.info("🔄 Auto Refresh: 5 detik")
-    countdown_placeholder = st.sidebar.empty()
-    for i in range(5, 0, -1):
-        with countdown_placeholder.container():
-            st.sidebar.info(f"Refresh dalam {i} detik...")
-        time.sleep(1)
-    st.rerun()  # Refresh setelah countdown
-
 # ===================================
-# DASHBOARD USTADZ — REAL-TIME
+# DASHBOARD USTADZ
 # ===================================
 if st.session_state.role == "Ustadz":
     st.header("Dashboard Ustadz")
@@ -143,26 +133,26 @@ if st.session_state.role == "Ustadz":
         st.info("Belum ada pertanyaan yang di-approve.")
     else:
         for n, q, t in rows:
-            tgl = t.split('.')[0] if t and '.' in t else t
+            tgl = t.split('.')[0] if t and '.' in t else (t or "Tanggal tidak diketahui")
             with st.expander(f"{n} • {tgl}"):
                 st.markdown(q)
 
 # ===================================
-# DASHBOARD OPERATOR — REAL-TIME
+# DASHBOARD OPERATOR
 # ===================================
 elif st.session_state.role == "Operator":
     st.header("Dashboard Operator")
-    tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi (Real-time)", "QR Tetap"])
+    tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Tetap"])
 
     with tab1:
         st.subheader("Buat Kajian Baru")
-        with st.form("new"):
+        with st.form("new_kajian"):
             nama_k = st.text_input("Nama Kajian *")
-            if st.form_submit_button("Buat"):
+            if st.form_submit_button("Buat Kajian"):
                 if nama_k.strip():
                     c.execute("INSERT INTO kajian (nama) VALUES (?)", (nama_k.strip(),))
                     conn.commit()
-                    st.success("Kajian dibuat!")
+                    st.success("Kajian berhasil dibuat!")
 
         st.markdown("---")
         st.subheader("Daftar Kajian")
@@ -183,7 +173,7 @@ elif st.session_state.role == "Operator":
                     conn.commit()
 
     with tab2:
-        st.subheader("Moderasi Pertanyaan — Update Otomatis")
+        st.subheader("Moderasi Pertanyaan")
         c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
         aktif = c.fetchone()
         if not aktif:
@@ -193,7 +183,7 @@ elif st.session_state.role == "Operator":
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
             all_q = c.fetchall()
             if not all_q:
-                st.info("Belum ada pertanyaan.")
+                st.info("Belum ada pertanyaan masuk.")
             else:
                 for q in all_q:
                     status = "Approved" if q[4] else "Menunggu"
@@ -213,12 +203,12 @@ elif st.session_state.role == "Operator":
                             conn.commit()
 
     with tab3:
-        st.success("QR CODE TETAP – PAKAI SELAMANYA!")
+        st.success("QR CODE TETAP – CETAK SEKALI, PAKAI SELAMANYA!")
         link = f"{LINK_DEPLOY}?penanya=yes"
         qr = f"https://api.qrserver.com/v1/create-qr-code/?size=600x600&data={urllib.parse.quote(link)}"
         col1, col2 = st.columns(2)
         col1.image(qr, caption="Scan untuk bertanya")
         col2.code(link)
-        st.info("Cetak QR ini & tempel di masjid — otomatis ikut kajian aktif!")
+        st.info("QR ini otomatis mengikuti kajian aktif!")
 
-st.sidebar.caption("KajianQNA • Real-time • Tanpa F5 Manual • Jazakumullah khoiron")
+st.sidebar.caption("KajianQNA • Final • Manual Refresh • Barokah")
