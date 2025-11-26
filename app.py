@@ -27,6 +27,21 @@ c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
 conn.commit()
 
 # ===================================
+# FUNGSI FORMAT TANGGAL INDONESIA
+# ===================================
+def format_tanggal(tanggal_str):
+    if not tanggal_str:
+        return "Tanggal tidak diketahui"
+    try:
+        # Format dari SQLite: 2025-04-05 14:30:25
+        dt = datetime.strptime(tanggal_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
+        bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+                 "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+        return f"{dt.day} {bulan[dt.month-1]} {dt.year}, {dt.strftime('%H:%M')}"
+    except:
+        return tanggal_str.split('.')[0]
+
+# ===================================
 # KONFIGURASI
 # ===================================
 PASS_OPERATOR = "operator123"
@@ -49,6 +64,7 @@ if st.query_params.get("penanya") == "yes":
         st.stop()
 
     st.success(f"KAJIAN AKTIF: **{aktif[1]}**")
+    st.caption(f"Tanggal: {datetime.now().strftime('%d %B %Y, %H:%M')}")
 
     with st.form("form_tanya"):
         nama = st.text_input("Nama Anda *", placeholder="Ahmad / Ibu Fatimah")
@@ -69,10 +85,11 @@ if st.query_params.get("penanya") == "yes":
     st.stop()
 
 # ===================================
-# DASHBOARD UTAMA — TANPA AUTO REFRESH
+# DASHBOARD UTAMA
 # ===================================
 st.set_page_config(page_title="KajianQNA - Panel", layout="wide")
 st.title("KajianQNA – Panel Ustadz & Operator")
+st.caption(f"Hari ini: **{datetime.now().strftime('%A, %d %B %Y | %H:%M')}**")
 
 # Session login
 if "logged_in" not in st.session_state:
@@ -100,8 +117,7 @@ if not st.session_state.logged_in:
             st.error("Password salah!")
     st.stop()
 
-# Status login + tombol refresh manual
-st.sidebar.success(f"Login sebagai: **{st.session_state.role}**")
+st.sidebar.success(f"**{st.session_state.role}**")
 if st.sidebar.button("Refresh Data Sekarang", type="primary", use_container_width=True):
     st.rerun()
 if st.sidebar.button("Logout"):
@@ -114,7 +130,7 @@ if st.sidebar.button("Logout"):
 # ===================================
 if st.session_state.role == "Ustadz":
     st.header("Dashboard Ustadz")
-    
+
     c.execute("SELECT nama FROM kajian WHERE aktif = 1")
     aktif_nama = c.fetchone()
     if aktif_nama:
@@ -133,8 +149,7 @@ if st.session_state.role == "Ustadz":
         st.info("Belum ada pertanyaan yang di-approve.")
     else:
         for n, q, t in rows:
-            tgl = t.split('.')[0] if t and '.' in t else (t or "Tanggal tidak diketahui")
-            with st.expander(f"{n} • {tgl}"):
+            with st.expander(f"{n} • {format_tanggal(t)}"):
                 st.markdown(q)
 
 # ===================================
@@ -156,18 +171,19 @@ elif st.session_state.role == "Operator":
 
         st.markdown("---")
         st.subheader("Daftar Kajian")
-        c.execute("SELECT id, nama, aktif FROM kajian ORDER BY id DESC")
+        c.execute("SELECT id, nama, tanggal_dibuat, aktif FROM kajian ORDER BY id DESC")
         for k in c.fetchall():
-            c1, c2, c3 = st.columns([4, 2, 2])
+            c1, c2, c3 = st.columns([4, 3, 2])
             c1.write(f"**{k[1]}**")
-            if k[2]:
-                c2.success("AKTIF")
-                if c3.button("Nonaktifkan", key=f"off_{k[0]}"):
+            c2.write(f"Dibuat: {format_tanggal(k[2])}")
+            if k[3]:
+                c3.success("AKTIF")
+                if st.button("Nonaktifkan", key=f"off_{k[0]}"):
                     c.execute("UPDATE kajian SET aktif = 0 WHERE id = ?", (k[0],))
                     conn.commit()
             else:
-                c2.write("Non-Aktif")
-                if c3.button("Aktifkan", key=f"on_{k[0]}", type="primary"):
+                c3.write("Non-Aktif")
+                if st.button("Aktifkan", key=f"on_{k[0]}", type="primary"):
                     c.execute("UPDATE kajian SET aktif = 0")
                     c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (k[0],))
                     conn.commit()
@@ -187,9 +203,8 @@ elif st.session_state.role == "Operator":
             else:
                 for q in all_q:
                     status = "Approved" if q[4] else "Menunggu"
-                    tgl = q[3].split('.')[0] if q[3] and '.' in q[3] else (q[3] or "-")
                     with st.container(border=True):
-                        st.write(f"**{q[1]}** • {tgl} • **{status}**")
+                        st.write(f"**{q[1]}** • {format_tanggal(q[3])} • **{status}**")
                         st.info(q[2])
                         col1, col2 = st.columns(2)
                         if q[4] == 0:
@@ -211,4 +226,4 @@ elif st.session_state.role == "Operator":
         col2.code(link)
         st.info("QR ini otomatis mengikuti kajian aktif!")
 
-st.sidebar.caption("KajianQNA • Final • Manual Refresh • Barokah")
+st.sidebar.caption("KajianQNA • Final + Tanggal Lengkap • Barokah")
