@@ -7,14 +7,14 @@ import urllib.parse
 # KONFIGURASI
 # ===================================
 DB_NAME = "kajian_qna.db"
-PASS_OPERATOR = "operator123"   # GANTI SESUAI KEINGINAN
-PASS_USTADZ = "ustadz123"       # GANTI SESUAI KEINGINAN
+PASS_OPERATOR = "operator123"   # GANTI KALAU MAU
+PASS_USTADZ = "ustadz123"       # GANTI KALAU MAU
 
 # GANTI SETELAH DEPLOY!
 LINK_DEPLOY = "https://tanya-ustadz-dirj.streamlit.app"  # UBAH INI NANTI
 
 # ===================================
-# DATABASE SETUP
+# DATABASE SETUP (AMAN)
 # ===================================
 conn = sqlite3.connect(DB_NAME, check_same_thread=False)
 c = conn.cursor()
@@ -29,7 +29,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                aktif INTEGER DEFAULT 0
             )''')
 
-# Tambah kolom jika belum ada
+# Tambah kolom kalau belum ada
 for col in ["nama_ustadz", "tanggal_kajian"]:
     try: c.execute(f"ALTER TABLE kajian ADD COLUMN {col} TEXT")
     except: pass
@@ -50,7 +50,7 @@ conn.commit()
 # ===================================
 def get_kajian_aktif():
     c.execute("SELECT nama, nama_ustadz, tanggal_kajian, id FROM kajian WHERE aktif = 1")
-    return c.fetchone()
+    return c.fetchone()  # Bisa None kalau belum ada
 
 def set_kajian_aktif(kajian_id):
     c.execute("UPDATE kajian SET aktif = 0")
@@ -67,45 +67,48 @@ if query_params.get("penanya") == "yes":
 
     aktif = get_kajian_aktif()
     if not aktif:
-        st.error("Maaf, belum ada kajian aktif saat ini.")
+        st.error("Maaf, saat ini belum ada kajian yang aktif.")
+        st.info("Silakan hubungi operator untuk mengaktifkan kajian.")
         st.stop()
 
     col1, col2 = st.columns([3,2])
     col1.success(f"KAJIAN: {aktif[0]}")
-    col2.info(f"{aktif[1] or 'Ustadz'} • {aktif[2] or ''}")
+    col2.info(f"{aktif[1] or 'Ustadz'} • {aktif[2] or 'Tanggal belum ditentukan'}")
 
     with st.form("form_tanya"):
-        nama = st.text_input("Nama Anda *")
-        pertanyaan = st.text_area("Pertanyaan Anda *", height=150)
+        nama = st.text_input("Nama Anda *", placeholder="Wajib diisi")
+        pertanyaan = st.text_area("Pertanyaan Anda *", height=150, placeholder="Tulis pertanyaan Anda di sini...")
         kirim = st.form_submit_button("Kirim Pertanyaan", type="primary")
 
         if kirim:
             if not nama.strip() or not pertanyaan.strip():
-                st.error("Harap isi semua field!")
+                st.error("Nama dan pertanyaan wajib diisi!")
             else:
+                # PERBAIKAN UTAMA: Pastikan kajian_id ada
+                kajian_id = aktif[3]  # ini pasti ada karena aktif tidak None
                 c.execute("INSERT INTO pertanyaan (kajian_id, nama_penanya, isi) VALUES (?, ?, ?)",
-                          (aktif[3], nama.strip(), pertanyaan.strip()))
+                          (kajian_id, nama.strip(), pertanyaan.strip()))
                 conn.commit()
-                st.success("Pertanyaan terkirim! Menunggu moderasi.")
+                st.success("Pertanyaan berhasil dikirim! Menunggu moderasi operator.")
                 st.balloons()
 
     st.caption("KajianQNA – Aman, terfilter, rahasia terjaga")
     st.stop()
 
 # ===================================
-# HALAMAN UTAMA (Operator & Ustadz)
+# DASHBOARD UTAMA (Operator & Ustadz)
 # ===================================
 st.set_page_config(page_title="KajianQNA Dashboard", layout="wide")
 st.title("KajianQNA – Sistem Tanya Jawab Ustadz")
 
-# Session state (tahan refresh!)
+# Session state (tahan refresh)
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "role" not in st.session_state:
     st.session_state.role = None
 
 # ===================================
-# LOGIN (Tahan F5!)
+# LOGIN
 # ===================================
 if not st.session_state.logged_in:
     st.markdown("### Login Dashboard")
@@ -129,7 +132,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ===================================
-# TAMPILKAN INFO KAJIAN AKTIF
+# INFO KAJIAN AKTIF
 # ===================================
 aktif = get_kajian_aktif()
 if aktif:
@@ -138,34 +141,27 @@ if aktif:
 else:
     st.warning("Belum ada kajian aktif")
 
-# Tombol Manual Refresh (hanya muncul di Operator & Ustadz)
-if st.session_state.logged_in:
-    if st.button("Refresh Data Sekarang", type="secondary"):
-        st.success("Data diperbarui!")
-        st.rerun()
+# Tombol Refresh Manual
+if st.button("Refresh Data", type="secondary"):
+    st.rerun()
 
 # ===================================
 # DASHBOARD USTADZ
 # ===================================
 if st.session_state.role == "Ustadz":
     st.header("Dashboard Ustadz")
-
     if not aktif:
         st.info("Belum ada kajian aktif.")
     else:
         st.subheader(f"Pertanyaan untuk: {aktif[0]}")
-
-        c.execute("""SELECT nama_penanya, isi, tanggal FROM pertanyaan 
-                     WHERE kajian_id = ? AND approved = 1 
-                     ORDER BY tanggal DESC""", (aktif[3],))
+        c.execute("SELECT nama_penanya, isi, tanggal FROM pertanyaan WHERE kajian_id = ? AND approved = 1 ORDER BY tanggal DESC", (aktif[3],))
         rows = c.fetchall()
-
         if not rows:
             st.info("Belum ada pertanyaan yang di-approve.")
         else:
             for nama, isi, tgl in rows:
-                with st.expander(f"{nama} • {tgl.split('.')[0]}", expanded=False):
-                    st.markdown(f"**{isi}**")
+                with st.expander(f"{nama} • {tgl.split('.')[0]}"):
+                    st.write(isi)
 
 # ===================================
 # DASHBOARD OPERATOR
@@ -176,16 +172,16 @@ elif st.session_state.role == "Operator":
 
     with tab1:
         st.subheader("Buat Kajian Baru")
-        with st.form("buat_kajian"):
+        with st.form("new_kajian"):
             nama = st.text_input("Nama Kajian *")
             ustadz = st.text_input("Nama Ustadz")
             tgl = st.date_input("Tanggal Kajian", datetime.now())
             if st.form_submit_button("Buat Kajian", type="primary"):
                 if nama.strip():
                     c.execute("INSERT INTO kajian (nama, nama_ustadz, tanggal_kajian) VALUES (?, ?, ?)",
-                              (nama, ustadz or None, str(tgl)))
+                              (nama.strip(), ustadz or None, str(tgl)))
                     conn.commit()
-                    st.success("Kajian dibuat!")
+                    st.success("Kajian berhasil dibuat!")
                     st.rerun()
                 else:
                     st.error("Nama kajian wajib diisi!")
@@ -198,10 +194,10 @@ elif st.session_state.role == "Operator":
             c1.write(f"**{row[1]}**")
             c2.write(row[2] or "-")
             c3.write(row[3] or "-")
-            if row[4] == 1:
+            if row[4]:
                 c4.success("AKTIF")
             else:
-                if c4.button("Aktifkan", key=f"aktif_{row[0]}"):
+                if c4.button("Aktifkan", key=f"on_{row[0]}"):
                     set_kajian_aktif(row[0])
                     st.rerun()
             if c5.button("Hapus", key=f"del_{row[0]}", type="secondary"):
@@ -213,7 +209,7 @@ elif st.session_state.role == "Operator":
     with tab2:
         st.subheader("Moderasi Pertanyaan")
         if not aktif:
-            st.info("Belum ada kajian aktif")
+            st.info("Belum ada kajian aktif.")
         else:
             c.execute("SELECT id, nama_penanya, isi, tanggal FROM pertanyaan WHERE kajian_id = ? AND approved = 0 ORDER BY tanggal DESC", (aktif[3],))
             waiting = c.fetchall()
@@ -236,7 +232,7 @@ elif st.session_state.role == "Operator":
                     st.markdown("---")
 
     with tab3:
-        st.success("QR CODE TETAP – PAKAI SELAMANYA!")
+        st.success("QR CODE TETAP – CETAK SEKALI, PAKAI SELAMANYA!")
         qr_link = f"{LINK_DEPLOY}?penanya=yes"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=600x600&data={urllib.parse.quote(qr_link)}"
         col1, col2 = st.columns(2)
@@ -254,4 +250,4 @@ with st.sidebar:
         st.session_state.role = None
         st.rerun()
 
-st.sidebar.caption("KajianQNA v1.0 • Stabil & Aman")
+st.sidebar.caption("KajianQNA v2.0 • Stabil, Aman, Tanpa Error")
