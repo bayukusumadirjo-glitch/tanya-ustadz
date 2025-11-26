@@ -22,20 +22,19 @@ c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
                 nama_penanya TEXT NOT NULL,
                 pertanyaan TEXT NOT NULL,
                 tanggal TEXT DEFAULT (datetime('now')),
-                approved INTEGER DEFAULT 0,
-                FOREIGN KEY (kajian_id) REFERENCES kajian (id)
+                approved INTEGER DEFAULT 0
              )''')
 conn.commit()
 
 # ===================================
 # KONFIGURASI
 # ===================================
-PASS_OPERATOR = "operator123"      # GANTI KALAU MAU
-PASS_USTADZ = "ustadz123"          # GANTI KALAU MAU
+PASS_OPERATOR = "operator123"
+PASS_USTADZ = "ustadz123"
 LINK_DEPLOY = "https://tanya-ustadz-dirj.streamlit.app"  # GANTI SETELAH DEPLOY!
 
 # ===================================
-# MODE PENANYA (dari QR)
+# MODE PENANYA (QR)
 # ===================================
 if st.query_params.get("penanya") == "yes":
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
@@ -46,14 +45,14 @@ if st.query_params.get("penanya") == "yes":
 
     if not aktif:
         st.error("Belum ada kajian aktif.")
-        st.info("Silakan hubungi operator masjid.")
+        st.info("Silakan hubungi operator.")
         st.stop()
 
     st.success(f"KAJIAN AKTIF: **{aktif[1]}**")
 
     with st.form("form_tanya"):
         nama = st.text_input("Nama Anda *", placeholder="Ahmad / Ibu Fatimah")
-        pertanyaan = st.text_area("Pertanyaan Anda *", height=150, placeholder="Tuliskan dengan ikhlas dan sopan...")
+        pertanyaan = st.text_area("Pertanyaan Anda *", height=150, placeholder="Tuliskan dengan ikhlas...")
         kirim = st.form_submit_button("Kirim Pertanyaan", type="primary")
 
         if kirim:
@@ -66,19 +65,18 @@ if st.query_params.get("penanya") == "yes":
                 
                 st.success("Pertanyaan berhasil dikirim! Menunggu moderasi.")
                 
-                # TULISAN MENGAMBANG — AMAN DI SEMUA VERSI STREAMLIT
-                st.toast("**Terima kasih sudah bertanya — Jazakumullah khoiron katsiro**", icon="raised_hands")
+                # INI YANG AMAN 100% DI SEMUA VERSI STREAMLIT
+                st.toast("Terima kasih sudah bertanya — Jazakumullah khoiron katsiro")
 
     st.caption("KajianQNA • Aman • Terfilter • Rahasia Terjaga")
     st.stop()
 
 # ===================================
-# DASHBOARD UTAMA (Operator & Ustadz)
+# DASHBOARD UTAMA
 # ===================================
 st.set_page_config(page_title="KajianQNA - Panel", layout="wide")
 st.title("KajianQNA – Panel Ustadz & Operator")
 
-# Session state login
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "role" not in st.session_state:
@@ -91,7 +89,6 @@ if not st.session_state.logged_in:
     st.sidebar.header("Login Panel")
     role = st.sidebar.radio("Pilih Role", ["Operator", "Ustadz"])
     pwd = st.sidebar.text_input("Password", type="password")
-    
     if st.sidebar.button(f"Masuk sebagai {role}", type="primary", use_container_width=True):
         if role == "Operator" and pwd == PASS_OPERATOR:
             st.session_state.logged_in = True
@@ -105,9 +102,8 @@ if not st.session_state.logged_in:
             st.error("Password salah!")
     st.stop()
 
-# Status login
-st.sidebar.success(f"Login sebagai: **{st.session_state.role}**")
-if st.sidebar.button("Logout", type="secondary"):
+st.sidebar.success(f"**{st.session_state.role}**")
+if st.sidebar.button("Logout"):
     st.session_state.logged_in = False
     st.session_state.role = None
     st.rerun()
@@ -117,7 +113,6 @@ if st.sidebar.button("Logout", type="secondary"):
 # ===================================
 if st.session_state.role == "Ustadz":
     st.header("Dashboard Ustadz")
-    
     c.execute("SELECT nama FROM kajian WHERE aktif = 1")
     aktif_nama = c.fetchone()
     if aktif_nama:
@@ -125,18 +120,13 @@ if st.session_state.role == "Ustadz":
     else:
         st.warning("Belum ada kajian aktif")
 
-    c.execute("""SELECT nama_penanya, pertanyaan, tanggal 
-                 FROM pertanyaan 
-                 WHERE kajian_id IN (SELECT id FROM kajian WHERE aktif = 1) 
-                 AND approved = 1 
-                 ORDER BY tanggal DESC""")
+    c.execute("SELECT nama_penanya, pertanyaan, tanggal FROM pertanyaan WHERE kajian_id IN (SELECT id FROM kajian WHERE aktif = 1) AND approved = 1 ORDER BY tanggal DESC")
     rows = c.fetchall()
-
     if not rows:
         st.info("Belum ada pertanyaan yang di-approve.")
     else:
         for n, q, t in rows:
-            tgl = t.split('.')[0] if t and '.' in t else (t or "Tanggal tidak diketahui")
+            tgl = t.split('.')[0] if t and '.' in t else t
             with st.expander(f"{n} • {tgl}"):
                 st.markdown(q)
 
@@ -149,13 +139,13 @@ elif st.session_state.role == "Operator":
 
     with tab1:
         st.subheader("Buat Kajian Baru")
-        with st.form("new_kajian"):
+        with st.form("new"):
             nama_k = st.text_input("Nama Kajian *")
-            if st.form_submit_button("Buat Kajian"):
+            if st.form_submit_button("Buat"):
                 if nama_k.strip():
                     c.execute("INSERT INTO kajian (nama) VALUES (?)", (nama_k.strip(),))
                     conn.commit()
-                    st.success(f"Kajian **{nama_k.strip()}** berhasil dibuat!")
+                    st.success("Kajian dibuat!")
                     st.rerun()
 
         st.markdown("---")
@@ -188,18 +178,15 @@ elif st.session_state.role == "Operator":
             st.write(f"Moderasi untuk: **{aktif[1]}**")
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
             all_q = c.fetchall()
-
             if not all_q:
-                st.info("Belum ada pertanyaan masuk.")
+                st.info("Belum ada pertanyaan.")
             else:
                 for q in all_q:
                     status = "Approved" if q[4] else "Menunggu"
-                    tgl = q[3].split('.')[0] if q[3] and '.' in q[3] else (q[3] or "Tidak ada tanggal")
-
+                    tgl = q[3].split('.')[0] if q[3] and '.' in q[3] else (q[3] or "-")
                     with st.container(border=True):
                         st.write(f"**{q[1]}** • {tgl} • **{status}**")
                         st.info(q[2])
-
                         col1, col2 = st.columns(2)
                         if q[4] == 0:
                             if col1.button("Approve", key=f"app_{q[0]}"):
@@ -208,21 +195,18 @@ elif st.session_state.role == "Operator":
                                 st.rerun()
                         else:
                             col1.write("Sudah di-approve")
-
                         if col2.button("Hapus", key=f"del_{q[0]}", type="secondary"):
                             c.execute("DELETE FROM pertanyaan WHERE id = ?", (q[0],))
                             conn.commit()
                             st.rerun()
 
     with tab3:
-        st.success("QR CODE TETAP – CETAK SEKALI, PAKAI SELAMANYA!")
+        st.success("QR CODE TETAP – PAKAI SELAMANYA!")
         link = f"{LINK_DEPLOY}?penanya=yes"
         qr = f"https://api.qrserver.com/v1/create-qr-code/?size=600x600&data={urllib.parse.quote(link)}"
         col1, col2 = st.columns(2)
         col1.image(qr, caption="Scan untuk bertanya")
         col2.code(link)
-        st.info("QR ini otomatis mengikuti kajian yang aktif. Cetak & tempel di masjid!")
+        st.info("Cetak QR ini & tempel di masjid — otomatis ikut kajian aktif!")
 
-# Footer
-st.sidebar.markdown("---")
 st.sidebar.caption("KajianQNA • Final • Barokah • Jazakumullah khoiron")
