@@ -39,7 +39,7 @@ else:
 # ===================================
 if is_penanya:
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
-    st.title("🙋 Tanya Ustadz")
+    st.title("Tanya Ustadz")
     st.info("Scan QR kode kajian → ajukan pertanyaan Anda (nama wajib).")
 
     c.execute("SELECT id, nama FROM kajian WHERE aktif = 1")
@@ -160,3 +160,4 @@ else:  # Operator
         st.image(qr_url)
         st.code(qr_data)
         st.info("Scan QR ini → langsung ke Penanya. Setelah deploy, ganti url_base ke link Streamlit kamu.")
+
