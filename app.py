@@ -4,12 +4,11 @@ from datetime import datetime
 import urllib.parse
 
 # ===================================
-# KONEKSI + UPGRADE DATABASE OTOMATIS (INI RAHASIANYA!)
+# KONEKSI + UPGRADE DATABASE OTOMATIS
 # ===================================
 conn = sqlite3.connect('kajian_qna.db', check_same_thread=False)
 c = conn.cursor()
 
-# Buat tabel kajian kalau belum ada (versi lama)
 c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nama TEXT NOT NULL,
@@ -17,21 +16,19 @@ c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 aktif INTEGER DEFAULT 0
              )''')
 
-# Tambahkan kolom ustadz kalau belum ada
+# Tambah kolom ustadz & tanggal_kajian kalau belum ada
 try:
     c.execute("ALTER TABLE kajian ADD COLUMN ustadz TEXT")
     conn.commit()
 except sqlite3.OperationalError:
-    pass  # Kolom sudah ada
+    pass
 
-# Tambahkan kolom tanggal_kajian kalau belum ada
 try:
     c.execute("ALTER TABLE kajian ADD COLUMN tanggal_kajian TEXT")
     conn.commit()
 except sqlite3.OperationalError:
-    pass  # Kolom sudah ada
+    pass
 
-# Tabel pertanyaan
 c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 kajian_id INTEGER,
@@ -89,8 +86,8 @@ if st.query_params.get("penanya") == "yes":
     st.info(f"**{ustadz_nama}** • {tgl_kajian}")
 
     with st.form("form_tanya"):
-        nama = st.text_input("Nama Anda *", placeholder="Ahmad / Ibu Fatimah")
-        pertanyaan = st.text_area("Pertanyaan Anda *", height=150, placeholder="Tuliskan dengan ikhlas dan sopan...")
+        nama = st.text_input("Nama Anda *")
+        pertanyaan = st.text_area("Pertanyaan Anda *", height=150)
         kirim = st.form_submit_button("Kirim Pertanyaan", type="primary")
 
         if kirim:
@@ -100,10 +97,10 @@ if st.query_params.get("penanya") == "yes":
                 c.execute("INSERT INTO pertanyaan (kajian_id, nama_penanya, pertanyaan) VALUES (?, ?, ?)",
                           (aktif[0], nama.strip(), pertanyaan.strip()))
                 conn.commit()
-                st.success("Pertanyaan berhasil dikirim! Menunggu moderasi.")
+                st.success("Pertanyaan berhasil dikirim!")
                 st.toast("Terima kasih sudah bertanya — Jazakumullah khoiron katsiro")
 
-    st.caption("KajianQNA • Aman • Terfilter • Rahasia Terjaga")
+    st.caption("KajianQNA • Aman • Terfilter")
     st.stop()
 
 # ===================================
@@ -171,7 +168,7 @@ if st.session_state.role == "Ustadz":
                 st.markdown(q)
 
 # ===================================
-# DASHBOARD OPERATOR
+# DASHBOARD OPERATOR — DENGAN FITUR EDIT KAJIAN!
 # ===================================
 elif st.session_state.role == "Operator":
     st.header("Dashboard Operator")
@@ -180,8 +177,8 @@ elif st.session_state.role == "Operator":
     with tab1:
         st.subheader("Buat Kajian Baru")
         with st.form("new_kajian"):
-            nama_k = st.text_input("Nama Kajian *", placeholder="Kajian Kitab Riyadhus Shalihin")
-            ustadz = st.text_input("Nama Ustadz *", placeholder="Ustadz Ahmad Sarwat, Lc.")
+            nama_k = st.text_input("Nama Kajian *")
+            ustadz = st.text_input("Nama Ustadz *")
             tgl_kajian = st.date_input("Tanggal Kajian *", datetime.now())
             submit = st.form_submit_button("Buat Kajian Baru", type="primary")
             if submit:
@@ -189,31 +186,70 @@ elif st.session_state.role == "Operator":
                     c.execute("INSERT INTO kajian (nama, ustadz, tanggal_kajian) VALUES (?, ?, ?)",
                               (nama_k.strip(), ustadz.strip(), str(tgl_kajian)))
                     conn.commit()
-                    st.success(f"Kajian **{nama_k.strip()}** berhasil dibuat!")
-                    st.balloons()
+                    st.success("Kajian berhasil dibuat!")
+                    st.rerun()
                 else:
-                    st.error("Nama kajian dan ustadz wajib diisi!")
+                    st.error("Semua field wajib diisi!")
 
         st.markdown("---")
         st.subheader("Daftar Kajian")
-        c.execute("SELECT id, nama, ustadz, tanggal_kajian, aktif FROM kajian ORDER BY id DESC")
-        for k in c.fetchall():
-            col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
-            col1.write(f"**{k[1]}**")
-            col2.write(f"{k[2] or '-'}")
-            col3.write(f"{format_tanggal(k[3]) if k[3] else '-'}")
-            if k[4]:
-                col4.success("AKTIF")
-                if st.button("Nonaktifkan", key=f"off_{k[0]}"):
-                    c.execute("UPDATE kajian SET aktif = 0 WHERE id = ?", (k[0],))
-                    conn.commit()
-            else:
-                col4.write("Non-Aktif")
-                if st.button("Aktifkan", key=f"on_{k[0]}", type="primary"):
-                    c.execute("UPDATE kajian SET aktif = 0")
-                    c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (k[0],))
-                    conn.commit()
 
+        c.execute("SELECT id, nama, ustadz, tanggal_kajian, aktif FROM kajian ORDER BY id DESC")
+        kajians = c.fetchall()
+
+        for k in kajians:
+            with st.expander(f"**{k[1]}** • {k[2] or 'Ustadz'} • {format_tanggal(k[3]) if k[3] else '-'}", expanded=False):
+                col_a, col_b, col_c = st.columns([2, 2, 3])
+
+                # Tombol Edit
+                if col_a.button("Edit", key=f"edit_{k[0]}"):
+                    st.session_state.edit_id = k[0]
+                    st.session_state.edit_nama = k[1]
+                    st.session_state.edit_ustadz = k[2]
+                    st.session_state.edit_tanggal = k[3] or datetime.now().date()
+                    st.rerun()
+
+                # Status Aktif
+                status = "AKTIF" if k[4] else "Non-Aktif"
+                warna = "success" if k[4] else "secondary"
+                col_b.write(f"**Status:** :{warna}[{status}]")
+
+                # Tombol Ganti Status
+                if k[4]:
+                    if col_c.button("Nonaktifkan", key=f"off_{k[0]}"):
+                        c.execute("UPDATE kajian SET aktif = 0 WHERE id = ?", (k[0],))
+                        conn.commit()
+                        st.rerun()
+                else:
+                    if col_c.button("Jadikan Aktif", key=f"on_{k[0]}", type="primary"):
+                        c.execute("UPDATE kajian SET aktif = 0")  # Matikan semua
+                        c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (k[0],))
+                        conn.commit()
+                        st.rerun()
+
+        # === FORM EDIT KAJIAN (Modal Style) ===
+        if "edit_id" in st.session_state:
+            st.markdown("---")
+            st.subheader("Edit Kajian")
+            with st.form("edit_form", clear_on_submit=True):
+                edit_nama = st.text_input("Nama Kajian", value=st.session_state.edit_nama)
+                edit_ustadz = st.text_input("Nama Ustadz", value=st.session_state.edit_ustadz or "")
+                edit_tanggal = st.date_input("Tanggal Kajian", value=datetime.strptime(st.session_state.edit_tanggal, "%Y-%m-%d") if isinstance(st.session_state.edit_tanggal, str) else st.session_state.edit_tanggal)
+
+                col1, col2 = st.columns(2)
+                if col1.form_submit_button("Simpan Perubahan", type="primary"):
+                    c.execute("""UPDATE kajian SET nama=?, ustadz=?, tanggal_kajian=? WHERE id=?""",
+                              (edit_nama.strip(), edit_ustadz.strip() or None, str(edit_tanggal), st.session_state.edit_id))
+                    conn.commit()
+                    st.success("Kajian berhasil diupdate!")
+                    del st.session_state.edit_id
+                    st.rerun()
+
+                if col2.form_submit_button("Batal"):
+                    del st.session_state.edit_id
+                    st.rerun()
+
+    # Tab Moderasi & QR tetap sama seperti sebelumnya
     with tab2:
         st.subheader("Moderasi Pertanyaan")
         c.execute("SELECT id, nama, ustadz, tanggal_kajian FROM kajian WHERE aktif = 1")
@@ -223,33 +259,29 @@ elif st.session_state.role == "Operator":
         else:
             st.write(f"Moderasi untuk: **{aktif[1]}** • {aktif[2] or 'Ustadz'} • {format_tanggal(aktif[3]) if aktif[3] else '-'}")
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
-            all_q = c.fetchall()
-            if not all_q:
-                st.info("Belum ada pertanyaan masuk.")
-            else:
-                for q in all_q:
-                    status = "Approved" if q[4] else "Menunggu"
-                    with st.container(border=True):
-                        st.write(f"**{q[1]}** • {format_tanggal(q[3])} • **{status}**")
-                        st.info(q[2])
-                        col1, col2 = st.columns(2)
-                        if q[4] == 0:
-                            if col1.button("Approve", key=f"app_{q[0]}"):
-                                c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (q[0],))
-                                conn.commit()
-                        else:
-                            col1.write("Sudah di-approve")
-                        if col2.button("Hapus", key=f"del_{q[0]}", type="secondary"):
-                            c.execute("DELETE FROM pertanyaan WHERE id = ?", (q[0],))
-                            conn.commit()
+            for q in c.fetchall():
+                status = "Approved" if q[4] else "Menunggu"
+                with st.container(border=True):
+                    st.write(f"**{q[1]}** • {format_tanggal(q[3])} • **{status}**")
+                    st.info(q[2])
+                    c1, c2 = st.columns(2)
+                    if q[4] == 0 and c1.button("Approve", key=f"a{q[0]}"):
+                        c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (q[0],))
+                        conn.commit()
+                        st.rerun()
+                    elif q[4] == 1:
+                        c1.write("Sudah di-approve")
+                    if c2.button("Hapus", key=f"d{q[0]}", type="secondary"):
+                        c.execute("DELETE FROM pertanyaan WHERE id = ?", (q[0],))
+                        conn.commit()
+                        st.rerun()
 
     with tab3:
-        st.success("QR CODE TETAP – CETAK SEKALI, PAKAI SELAMANYA!")
+        st.success("QR CODE TETAP – PAKAI SELAMANYA!")
         link = f"{LINK_DEPLOY}?penanya=yes"
         qr = f"https://api.qrserver.com/v1/create-qr-code/?size=600x600&data={urllib.parse.quote(link)}"
-        col1, col2 = st.columns(2)
-        col1.image(qr, caption="Scan untuk bertanya")
-        col2.code(link)
-        st.info("QR ini otomatis mengikuti kajian aktif!")
+        c1, c2 = st.columns(2)
+        c1.image(qr, caption="Scan untuk bertanya")
+        c2.code(link)
 
-st.sidebar.caption("KajianQNA • Final • Ustadz + Tanggal • 100% Stabil")
+st.sidebar.caption("KajianQNA • Final + Edit Kajian • Barokah • Jazakumullah khoiron")
