@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 import urllib.parse
+import time
 
 # ===================================
 # DATABASE
@@ -69,13 +70,10 @@ if st.query_params.get("penanya") == "yes":
     st.stop()
 
 # ===================================
-# DASHBOARD UTAMA + AUTO REFRESH SETIAP 5 DETIK
+# DASHBOARD UTAMA + AUTO REFRESH AMAN (TANPA st.rerun_every)
 # ===================================
 st.set_page_config(page_title="KajianQNA - Panel", layout="wide")
 st.title("KajianQNA – Panel Ustadz & Operator")
-
-# Auto refresh halaman setiap 5 detik (pertanyaan langsung muncul!)
-st.rerun_every(5)
 
 # Session login
 if "logged_in" not in st.session_state:
@@ -108,6 +106,18 @@ if st.sidebar.button("Logout"):
     st.session_state.logged_in = False
     st.session_state.role = None
     st.rerun()
+
+# AUTO REFRESH COUNTDOWN — AMAN DI SEMUA VERSI
+if st.session_state.logged_in:
+    # Countdown 5 detik di sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.info("🔄 Auto Refresh: 5 detik")
+    countdown_placeholder = st.sidebar.empty()
+    for i in range(5, 0, -1):
+        with countdown_placeholder.container():
+            st.sidebar.info(f"Refresh dalam {i} detik...")
+        time.sleep(1)
+    st.rerun()  # Refresh setelah countdown
 
 # ===================================
 # DASHBOARD USTADZ — REAL-TIME
@@ -153,7 +163,6 @@ elif st.session_state.role == "Operator":
                     c.execute("INSERT INTO kajian (nama) VALUES (?)", (nama_k.strip(),))
                     conn.commit()
                     st.success("Kajian dibuat!")
-                    # st.rerun() tidak perlu lagi karena auto refresh
 
         st.markdown("---")
         st.subheader("Daftar Kajian")
@@ -210,7 +219,6 @@ elif st.session_state.role == "Operator":
         col1, col2 = st.columns(2)
         col1.image(qr, caption="Scan untuk bertanya")
         col2.code(link)
-        st.info("QR ini otomatis ikut kajian aktif — cetak sekali, pakai selamanya!")
+        st.info("Cetak QR ini & tempel di masjid — otomatis ikut kajian aktif!")
 
-# Footer
-st.sidebar.caption("KajianQNA • Real-time • Tanpa Refresh Manual • Jazakumullah khoiron")
+st.sidebar.caption("KajianQNA • Real-time • Tanpa F5 Manual • Jazakumullah khoiron")
