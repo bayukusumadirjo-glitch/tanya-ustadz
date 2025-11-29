@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 import urllib.parse
+import random  # Untuk key unik
 
 # ===================================
 # DATABASE + UPGRADE OTOMATIS
@@ -170,7 +171,7 @@ if st.session_state.role == "Ustadz":
             st.markdown(pertanyaan)
 
 # ===================================
-# DASHBOARD OPERATOR — KEY UNIK 100%!
+# DASHBOARD OPERATOR — HAPUS SUDAH JALAN!
 # ===================================
 elif st.session_state.role == "Operator":
     st.header("Dashboard Operator")
@@ -270,20 +271,20 @@ elif st.session_state.role == "Operator":
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
             for q in c.fetchall():
                 q_id = q[0]
-                # KEY UNIK 100% — MENGGUNAKAN TIMESTAMP + ID
-                unique_key = f"{datetime.now().timestamp()}_{q_id}"
+                # KEY UNIK 100% — MENGGUNAKAN ID + RANDOM NUMBER
+                random_suffix = random.randint(1000, 9999)
                 with st.container(border=True):
                     st.write(f"**{q[1]}** • {format_tanggal_hanya(q[3])}")
                     st.info(q[2])
                     c1, c2 = st.columns(2)
                     if q[4] == 0:
-                        if c1.button("Approve", key=f"approve_{unique_key}"):
+                        if c1.button("Approve", key=f"approve_{q_id}_{random_suffix}"):
                             c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (q_id,))
                             conn.commit()
                             st.rerun()
                     else:
                         c1.success("Sudah di-approve")
-                    if c2.button("Hapus", key=f"hapus_{unique_key}", type="secondary"):
+                    if c2.button("Hapus", key=f"hapus_{q_id}_{random_suffix}", type="secondary"):
                         c.execute("DELETE FROM pertanyaan WHERE id = ?", (q_id,))
                         conn.commit()
                         st.rerun()
@@ -296,4 +297,4 @@ elif st.session_state.role == "Operator":
         c1.image(qr, caption="Scan untuk bertanya")
         c2.code(link)
 
-st.sidebar.caption("KajianQNA • Final • Tombol Hapus Jalan 100% • Barokah")
+st.sidebar.caption("KajianQNA • Final • Hapus Sudah Jalan • Jazakumullah khoiron")
