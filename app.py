@@ -171,7 +171,7 @@ if st.session_state.role == "Ustadz":
             st.markdown(pertanyaan)
 
 # ===================================
-# DASHBOARD OPERATOR — HAPUS SUDAH JALAN!
+# DASHBOARD OPERATOR — HAPUS JALAN MULUS!
 # ===================================
 elif st.session_state.role == "Operator":
     st.header("Dashboard Operator")
@@ -271,7 +271,7 @@ elif st.session_state.role == "Operator":
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
             for q in c.fetchall():
                 q_id = q[0]
-                # KEY UNIK 100% — MENGGUNAKAN ID + RANDOM NUMBER
+                # KEY UNIK 100% — ID + RANDOM NUMBER
                 random_suffix = random.randint(1000, 9999)
                 with st.container(border=True):
                     st.write(f"**{q[1]}** • {format_tanggal_hanya(q[3])}")
@@ -297,4 +297,4 @@ elif st.session_state.role == "Operator":
         c1.image(qr, caption="Scan untuk bertanya")
         c2.code(link)
 
-st.sidebar.caption("KajianQNA • Final • Hapus Sudah Jalan • Jazakumullah khoiron")
+st.sidebar.caption("KajianQNA • Final • Hapus Jalan 100% • Jazakumullah khoiron")
