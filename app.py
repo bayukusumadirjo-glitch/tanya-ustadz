@@ -12,10 +12,9 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS kajian (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nama TEXT NOT NULL,
-                tanggal_dibuat TEXT DEFAULT (datetime('now')),
-                aktif INTEGER DEFAULT 0,
                 ustadz TEXT,
-                tanggal_kajian TEXT
+                tanggal_kajian TEXT,
+                aktif INTEGER DEFAULT 0
              )''')
 
 c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
@@ -29,39 +28,30 @@ c.execute('''CREATE TABLE IF NOT EXISTS pertanyaan (
 conn.commit()
 
 # ===================================
-# COUNTER UNTUK KEY UNIK (INI YANG BIKIN HAPUS JALAN!)
-# ===================================
-if "btn_counter" not in st.session_state:
-    st.session_state.btn_counter = 0
-st.session_state.btn_counter += 1
-
-# ===================================
-# FORMAT TANGGAL
+# FORMAT TANGGAL (HANYA TANGGAL)
 # ===================================
 def format_tanggal_hanya(tanggal_str):
     if not tanggal_str:
         return "Tanggal tidak diketahui"
     try:
         dt = datetime.strptime(tanggal_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
-        bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
-        return f"{dt.day} {bulan[dt.month-1]} {dt.year}"
     except:
         try:
             dt = datetime.strptime(tanggal_str, "%Y-%m-%d")
-            bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
-            return f"{dt.day} {bulan[dt.month-1]} {dt.year}"
         except:
             return tanggal_str.split(' ')[0]
+    bulan = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"]
+    return f"{dt.day} {bulan[dt.month-1]} {dt.year}"
 
 # ===================================
 # KONFIGURASI
 # ===================================
 PASS_OPERATOR = "operator123"
 PASS_USTADZ   = "ustadz123"
-LINK_DEPLOY   = "https://tanya-ustadz-dirj.streamlit.app"  # GANTI KALAU SUDAH DEPLOY
+LINK_DEPLOY   = "https://tanya-ustadz-dirj.streamlit.app"
 
 # ===================================
-# MODE PENANYA
+# MODE PENANYA (Link QR)
 # ===================================
 if st.query_params.get("penanya") == "yes":
     st.set_page_config(page_title="Tanya Ustadz", layout="centered")
@@ -69,21 +59,17 @@ if st.query_params.get("penanya") == "yes":
 
     c.execute("SELECT id, nama, ustadz, tanggal_kajian FROM kajian WHERE aktif = 1")
     aktif = c.fetchone()
-
     if not aktif:
         st.error("Belum ada kajian aktif.")
         st.info("Silakan hubungi operator masjid.")
         st.stop()
 
-    ustadz_nama = aktif[2] if aktif[2] else "Ustadz"
-    tgl_kajian = format_tanggal_hanya(aktif[3]) if aktif[3] else "Tanggal belum ditentukan"
-
     st.success(f"KAJIAN: **{aktif[1]}**")
-    st.info(f"**{ustadz_nama}** • {tgl_kajian}")
+    st.info(f"**{aktif[2] or 'Ustadz'}** • {format_tanggal_hanya(aktif[3])}")
 
     with st.form("form_tanya"):
-        nama = st.text_input("Nama Anda *")
-        pertanyaan = st.text_area("Pertanyaan Anda *", height=150)
+        nama = st.text_input("Nama Anda *", placeholder="Ahmad / Ibu Fatimah")
+        pertanyaan = st.text_area("Pertanyaan Anda *", height=150, placeholder="Tuliskan dengan ikhlas dan sopan...")
         kirim = st.form_submit_button("Kirim Pertanyaan", type="primary")
         if kirim:
             if not nama.strip() or not pertanyaan.strip():
@@ -92,8 +78,9 @@ if st.query_params.get("penanya") == "yes":
                 c.execute("INSERT INTO pertanyaan (kajian_id, nama_penanya, pertanyaan) VALUES (?, ?, ?)",
                           (aktif[0], nama.strip(), pertanyaan.strip()))
                 conn.commit()
-                st.success("Pertanyaan berhasil dikirim!")
+                st.success("Pertanyaan berhasil dikirim! Menunggu moderasi.")
                 st.toast("Terima kasih — Jazakumullah khoiron")
+    st.caption("KajianQNA • Aman & Terfilter")
     st.stop()
 
 # ===================================
@@ -135,7 +122,7 @@ if st.sidebar.button("Logout"):
     st.rerun()
 
 # ===================================
-# DASHBOARD USTADZ
+# DASHBOARD USTADZ (Tanpa Jam)
 # ===================================
 if st.session_state.role == "Ustadz":
     st.header("Dashboard Ustadz")
@@ -143,7 +130,7 @@ if st.session_state.role == "Ustadz":
     aktif = c.fetchone()
     if aktif:
         st.success(f"KAJIAN AKTIF: **{aktif[0]}**")
-        st.info(f"**{aktif[1] or 'Ustadz'}** • {format_tanggal_hanya(aktif[2]) if aktif[2] else '-'}")
+        st.info(f"**{aktif[1] or 'Ustadz'}** • {format_tanggal_hanya(aktif[2])}")
     else:
         st.warning("Belum ada kajian aktif")
         st.stop()
@@ -160,12 +147,13 @@ if st.session_state.role == "Ustadz":
             st.markdown(pertanyaan)
 
 # ===================================
-# DASHBOARD OPERATOR — TOMBOL HAPUS JALAN 100%!
+# DASHBOARD OPERATOR
 # ===================================
 elif st.session_state.role == "Operator":
     st.header("Dashboard Operator")
     tab1, tab2, tab3 = st.tabs(["Kelola Kajian", "Moderasi", "QR Tetap"])
 
+    # TAB 1: Kelola Kajian
     with tab1:
         st.subheader("Buat Kajian Baru")
         with st.form("new_kajian"):
@@ -225,6 +213,7 @@ elif st.session_state.role == "Operator":
                 del st.session_state.hapus_nama
                 st.rerun()
 
+    # TAB 2: Moderasi — TOMBOL HAPUS SUDAH 100% JALAN!
     with tab2:
         st.subheader("Moderasi Pertanyaan")
         c.execute("SELECT id, nama, ustadz, tanggal_kajian FROM kajian WHERE aktif = 1")
@@ -232,29 +221,36 @@ elif st.session_state.role == "Operator":
         if not aktif:
             st.info("Belum ada kajian aktif.")
         else:
-            st.write(f"Moderasi untuk: **{aktif[1]}** • {aktif[2] or 'Ustadz'} • {format_tanggal_hanya(aktif[3]) if aktif[3] else '-'}")
+            st.write(f"Moderasi untuk: **{aktif[1]}** • {aktif[2] or 'Ustadz'} • {format_tanggal_hanya(aktif[3])}")
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
-            for q in c.fetchall():
-                q_id, nama, isi, tgl, approved = q
-                key_suffix = f"{q_id}_{st.session_state.btn_counter}"
-                with st.container(border=True):
-                    st.write(f"**{nama}** • {format_tanggal_hanya(tgl)}")
-                    st.info(isi)
-                    col1, col2 = st.columns(2)
-                    if approved == 0:
-                        if col1.button("Approve", key=f"app_{key_suffix}"):
-                            c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (q_id,))
+            pertanyaans = c.fetchall()
+
+            if not pertanyaans:
+                st.info("Belum ada pertanyaan.")
+            else:
+                for index, q in enumerate(pertanyaans):
+                    q_id, nama, isi, tgl, approved = q
+                    with st.container(border=True):
+                        st.write(f"**{nama}** • {format_tanggal_hanya(tgl)}")
+                        st.info(isi)
+                        col1, col2 = st.columns(2)
+
+                        if approved == 0:
+                            if col1.button("Approve", key=f"approve_{q_id}_{index}"):
+                                c.execute("UPDATE pertanyaan SET approved = 1 WHERE id = ?", (q_id,))
+                                conn.commit()
+                                st.rerun()
+                        else:
+                            col1.success("Sudah di-approve")
+
+                        if col2.button("Hapus", key=f"delete_{q_id}_{index}", type="secondary"):
+                            c.execute("DELETE FROM pertanyaan WHERE id = ?", (q_id,))
                             conn.commit()
                             st.rerun()
-                    else:
-                        col1.success("Sudah di-approve")
-                    if col2.button("Hapus", key=f"del_{key_suffix}", type="secondary"):
-                        c.execute("DELETE FROM pertanyaan WHERE id = ?", (q_id,))
-                        conn.commit()
-                        st.rerun()
 
+    # TAB 3: QR Tetap
     with tab3:
-        st.success("QR CODE TETAP")
+        st.success("QR CODE TETAP – PAKAI SELAMANYA!")
         link = f"{LINK_DEPLOY}?penanya=yes"
         qr = f"https://api.qrserver.com/v1/create-qr-code/?size=600x600&data={urllib.parse.quote(link)}"
         col1, col2 = st.columns(2)
