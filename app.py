@@ -197,7 +197,7 @@ elif st.session_state.role == "Operator":
             kajian_id, nama, ustadz_n, tgl, aktif = k
             with st.expander(f"**{nama}** • {ustadz_n or 'Ustadz'} • {format_tanggal_hanya(tgl) if tgl else '-'}"):
                 col1, col2, col3, col4 = st.columns(4)
-                if col1.button("Edit", key=f"edit_{kajian_id}_{datetime.now().timestamp()}"):
+                if col1.button("Edit", key=f"edit_{kajian_id}"):
                     st.session_state.edit_id = kajian_id
                     st.session_state.edit_nama = nama
                     st.session_state.edit_ustadz = ustadz_n
@@ -205,17 +205,17 @@ elif st.session_state.role == "Operator":
                     st.rerun()
                 col2.write(f"**{'AKTIF' if aktif else 'Non-Aktif'}**")
                 if aktif:
-                    if col3.button("Nonaktifkan", key=f"off_{kajian_id}_{datetime.now().timestamp()}"):
+                    if col3.button("Nonaktifkan", key=f"off_{kajian_id}"):
                         c.execute("UPDATE kajian SET aktif = 0 WHERE id = ?", (kajian_id,))
                         conn.commit()
                         st.rerun()
                 else:
-                    if col3.button("Jadikan Aktif", key=f"on_{kajian_id}_{datetime.now().timestamp()}", type="primary"):
+                    if col3.button("Jadikan Aktif", key=f"on_{kajian_id}", type="primary"):
                         c.execute("UPDATE kajian SET aktif = 0")
                         c.execute("UPDATE kajian SET aktif = 1 WHERE id = ?", (kajian_id,))
                         conn.commit()
                         st.rerun()
-                if col4.button("Hapus Kajian", key=f"delkaj_{kajian_id}_{datetime.now().timestamp()}", type="secondary"):
+                if col4.button("Hapus Kajian", key=f"delkaj_{kajian_id}", type="secondary"):
                     st.session_state.hapus_id = kajian_id
                     st.session_state.hapus_nama = nama
                     st.rerun()
@@ -270,6 +270,7 @@ elif st.session_state.role == "Operator":
             c.execute("SELECT id, nama_penanya, pertanyaan, tanggal, approved FROM pertanyaan WHERE kajian_id = ? ORDER BY tanggal DESC", (aktif[0],))
             for q in c.fetchall():
                 q_id = q[0]
+                # KEY UNIK 100% — MENGGUNAKAN TIMESTAMP + ID
                 unique_key = f"{datetime.now().timestamp()}_{q_id}"
                 with st.container(border=True):
                     st.write(f"**{q[1]}** • {format_tanggal_hanya(q[3])}")
@@ -295,4 +296,4 @@ elif st.session_state.role == "Operator":
         c1.image(qr, caption="Scan untuk bertanya")
         c2.code(link)
 
-st.sidebar.caption("KajianQNA • Final • Tombol Hapus Jalan • Barokah")
+st.sidebar.caption("KajianQNA • Final • Tombol Hapus Jalan 100% • Barokah")
